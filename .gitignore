@@ -1,0 +1,16 @@
+# Secrets and Environments
+*.env
+!*.env.example
+
+# OS generated files
+.DS_Store
+.Thumbs.db
+
+# Docker Data
+volumes/
+/services/*/config/
+/infrastructure/*/config/
+
+# IDE files
+.vscode/
+.idea/
