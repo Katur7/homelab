@@ -9,12 +9,13 @@ Each service folder must contain:
 All services must reference `../../global.env` for shared variables.
 
 ## 🌐 Networking & DNS
-- **External:** `https://<service>.pippinn.me` (Routed via Cloudflare Tunnel -> Traefik).
-- **Internal:** `https://<service>.internal.pippinn.me` (Local DNS via PiHole -> Traefik).
+- **Tunnel Network:** `traefik_tunnel` (Defined in Infrastructure/Traefik). Used by Cloudflare Tunnel and Traefik.
+- **Internal Network:** `traefik_internal` (Defined in Infrastructure/Traefik). Used by Traefik to communicate with services.
+- **External:** `https://<service>.pippinn.me`
+- **Internal:** `https://<service>.internal.pippinn.me`
 - **Traefik v3:** All routing uses Traefik v3 labels with backtick syntax.
-- **Isolation:** Apps use a backend bridge network for DB communication. Only Traefik/Tunnels inhabit the `traefik_tunnel` network.
 
 ## 💾 Volume Management
 - **Configs:** Stored locally in `./config` within the service folder for portability.
-- **Bulk Data:** Absolute paths to OMV-managed RAID/HDD shares (e.g., `/srv/dev-disk-...`).
-- **Permissions:** All containers should use `PUID=1000` and `PGID=1000` to match user `grimur`.
+- **Bulk Data:** Absolute paths to OMV-managed shares (e.g., `/srv/dev-disk-by-uuid-...`).
+- **Permissions:** All containers should use `PUID=1000` and `PGID=100` (User: grimur, Group: users).
