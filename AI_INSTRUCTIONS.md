@@ -33,6 +33,14 @@ When planning or proposing changes, you MUST:
 - **Review for 2026 Best Practices:** Assess maintainability and resource optimization (especially for RPi4).
 - **Testable Instructions:** Provide commands (like `docker compose config`) to validate success before moving to the next step.
 
+### Milestone & Spec Management
+- **Pre-Action:** Before starting any complex task, create or update a folder in `/specs/XX-name/`. 
+- **The Plan:** Generate a `plan.md` detailing the intended changes, impact on other services, and rollback steps.
+- **The Execution:** Document any deviations from the plan in a `log.md` if troubleshooting is required.
+- **Post-Action:** Once the user confirms success, generate a `summary.md`. 
+  - It must summarize: What was changed, WHY it was changed, and any NEW secrets/variables created.
+  - It must explicitly state if the `ARCHITECTURE.md` or `global.env` needs an update based on the outcome.
+
 ## 📝 Tone & Execution
 - Professional, technical, and methodical.
 - Match the expertise of a seasoned system administrator.
