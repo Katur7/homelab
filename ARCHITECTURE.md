@@ -19,3 +19,22 @@ All services must reference `../../global.env` for shared variables.
 - **Configs:** Stored locally in `./config` within the service folder for portability.
 - **Bulk Data:** Absolute paths to OMV-managed shares (e.g., `/srv/dev-disk-by-uuid-...`).
 - **Permissions:** All containers should use `PUID=1000` and `PGID=100` (User: grimur, Group: users).
+
+## 🔒 Backup Strategy
+
+### Homelab Repository Backup (Milestone 02)
+- **Source:** `/home/grimur/homelab/`
+- **Destination:** Existing local Borg repository on NAS share (`/srv/dev-disk-by-uuid-0ddafbf7-f06d-424d-8e9c-95d97fbd4484/backup/borg/`)
+- **Method:** OMV BorgBackup plugin — job configured via OMV UI
+- **Archive prefix:** `homelab-`
+- **Schedule:** Daily at 02:00
+- **Retention:** 7 daily / 4 weekly / 3 monthly
+- **Exclusions:** `volumes/`, `.git/objects/pack/`
+
+### Verify Backup Health
+```bash
+borg list /srv/dev-disk-by-uuid-0ddafbf7-f06d-424d-8e9c-95d97fbd4484/backup/borg/
+```
+Look for recent `homelab-YYYY-MM-DD` archives.
+
+> ⚠️ **Note:** This is a local-only backup. An offsite destination is a future milestone.
