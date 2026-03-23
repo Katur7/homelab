@@ -107,14 +107,13 @@ hub-managed path exclusions added to the OMV BorgBackup job.
 
 ## ⚠️ Known Risks & Technical Debt
 
-- **Cutover not yet performed** — The OMV-managed stacks are still running. The GitOps
-  stacks are ready to deploy when convenient. See `plan.md` for cutover steps.
 - **CrowdSec bouncer key in middlewares.yml** — The CrowdSec LAPI bouncer key is
   hardcoded in `config/dynamic/middlewares.yml` (git-tracked). It's a local-network-only
   key with no external attack surface, but ideally it would be injected at runtime.
   Acceptable risk for now.
-- **OMV stacks still active** — Until cutover, the OMV versions remain the authoritative
-  running config. Do not edit the GitOps compose files and expect immediate effect.
+- **Old OMV stacks** — The OMV-managed traefik/cloudflare stacks should be disabled in
+  OMV UI to prevent them auto-starting after a reboot. Also remove `traefik_crowdsec-db`
+  volume once confident: `docker volume rm traefik_crowdsec-db`
 
 ## 🏁 Result
 
