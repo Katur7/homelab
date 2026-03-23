@@ -1,7 +1,7 @@
 # Milestone 02 Plan: Backup Configuration
 
 **Date:** March 2026
-**Status:** `IN PROGRESS`
+**Status:** `COMPLETED`
 **Author:** grimur & NAS Helper (AI)
 
 ## 🎯 Objective
@@ -29,7 +29,7 @@ Configure a new job in the OMV UI with the following settings:
 | **Source path** | `/home/grimur/homelab` |
 | **Repository** | Existing local repo on NAS share (see ARCHITECTURE.md for path) |
 | **Archive name prefix** | `homelab-` |
-| **Compression** | `lz4` |
+| **Compression** | `zstd,3` |
 | **Schedule** | Daily at 02:00 |
 
 ### Exclusions
