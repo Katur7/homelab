@@ -22,7 +22,7 @@ networks:
 volumes:
   crowdsec-db:
     external: true
-    name: traefik_crowdsec-db
+    name: crowdsec-db
 
 services:
 

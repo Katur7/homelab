@@ -29,7 +29,21 @@ All services must reference `../../global.env` for shared variables.
 - **Archive prefix:** `homelab-`
 - **Schedule:** Daily at 02:00
 - **Retention:** 7 daily / 4 weekly / 3 monthly
-- **Exclusions:** `volumes/` only (`.git/` backed up in full for complete history recovery)
+- **Exclusions:**
+  - `volumes/` — Docker volume data
+  - `infrastructure/gateway/logs/` — runtime access logs
+  - `infrastructure/gateway/config/authelia/secrets/` — OIDC private key
+  - CrowdSec hub-managed content (auto-downloaded at startup, not our config):
+    - `infrastructure/gateway/config/crowdsec/hub/`
+    - `infrastructure/gateway/config/crowdsec/collections/`
+    - `infrastructure/gateway/config/crowdsec/parsers/`
+    - `infrastructure/gateway/config/crowdsec/scenarios/`
+    - `infrastructure/gateway/config/crowdsec/postoverflows/`
+    - `infrastructure/gateway/config/crowdsec/contexts/`
+    - `infrastructure/gateway/config/crowdsec/patterns/`
+    - `infrastructure/gateway/config/crowdsec/appsec-configs/`
+    - `infrastructure/gateway/config/crowdsec/appsec-rules/`
+  - `.git/` backed up in full for complete history recovery
 
 ### Verify Backup Health
 ```bash
