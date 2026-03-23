@@ -1,0 +1,134 @@
+# Authelia main configuration
+server:
+  address: "tcp://0.0.0.0:9091"
+
+# Session persistence in Redis
+session:
+  name: authelia_session
+  secret: "${AUTHELIA_SESSION_SECRET}"
+  expiration: 1h
+  inactivity: 5m
+  cookies:
+    - domain: "pippinn.me"
+      authelia_url: "https://auth.pippinn.me"
+      default_redirection_url: "https://hello.pippinn.me"
+  redis:
+    host: redis
+    port: 6379
+    password: "${REDIS_PASSWORD}"
+    database_index: 0
+
+identity_validation:
+  reset_password:
+    jwt_secret: "${AUTHELIA_IDENTITY_VALIDATION_RESET_PASSWORD_JWT_SECRET}"
+
+# Authentication Backend (File-based for now)
+authentication_backend:
+  file:
+    path: /config/users_database.yml
+
+# Access Control (The Gatekeeper)
+access_control:
+  default_policy: deny
+  rules:
+    # Exposed sites
+    - domain: auth.pippinn.me
+      policy: bypass
+    - domain: hello.pippinn.me
+      policy: bypass
+    - domain: ord-dagsins.pippinn.me
+      policy: bypass
+    
+    # Secured sites
+    - domain: todo.pippinn.me
+      policy: two_factor
+    - domain: photos.pippinn.me
+      policy: two_factor
+    - domain: '*.pippinn.me'
+      policy: two_factor
+
+# Security settings
+notifier:
+  filesystem:
+    filename: /config/notification.txt
+
+webauthn:
+  disable: false
+  display_name: "Pippinn Authelia"
+  # This is the key setting to allow passwordless/passkey login
+  enable_passkey_login: true 
+  
+  selection_criteria:
+    # 'preferred' or 'required' allows Bitwarden to see the request
+    discoverability: 'preferred' 
+    # Bitwarden requires user verification (PIN/Biometric) to unlock
+    user_verification: 'preferred'
+
+storage:
+  local:
+    path: /config/db.sqlite3
+
+identity_providers:
+  oidc:
+    jwks:
+      - key: {{ secret "/config/secrets/oidc/jwks/rsa.2048.key" | mindent 10 "|" | msquote }}
+    cors:
+      endpoints:
+        - authorization
+        - token
+        - userinfo
+        - introspection
+      allowed_origins_from_client_redirect_uris: true
+    clients:
+      - client_id: 'immich'
+        client_name: 'Immich'
+        client_secret: '$pbkdf2-sha512$310000$a1xwNnAxIIGAb2HYR8zIwg$mVLS/bB7c2PoX.MnLSsCjWe1bRRSJsxEXmQesdOw46dFlCcOlAjkVt26yE3dZD4VoeIGTwWjyzqpRI3CucBy5g'
+        public: false
+        authorization_policy: 'two_factor'
+        redirect_uris:
+          - 'https://photos.pippinn.me/auth/login'
+          - 'https://photos.pippinn.me/user-settings'
+          - 'app.immich:///oauth-callback' # Required for the Mobile App
+        scopes:
+          - 'openid'
+          - 'profile'
+          - 'email'
+        userinfo_signed_response_alg: 'RS256'
+        token_endpoint_auth_method: 'client_secret_post'
+      - client_id: 'audiobookshelf'
+        client_name: 'Audiobookshelf'
+        client_secret: '$pbkdf2-sha512$310000$TE6GqB4n1moaCkrBmk06Gw$z3Wxw2.W/IzqWaR5s.j5/hiWmr8ZevolzZiM3rTn/XU8L6Im1ZaFz5btSug881nz1Ed1TIyV23TkW89WgfTShA'
+        public: false
+        authorization_policy: 'two_factor'
+        require_pkce: true
+        pkce_challenge_method: 'S256'
+        redirect_uris:
+          - 'https://audiobookshelf.pippinn.me/auth/openid/callback'
+          - 'https://audiobookshelf.pippinn.me/auth/openid/mobile-redirect'
+          - 'https://audiobookshelf.pippinn.me/'
+          - 'audiobookshelf://oauth'
+        scopes:
+          - 'openid'
+          - 'profile'
+          - 'email'
+          - 'groups'
+        response_types:
+          - 'code'
+        grant_types:
+          - 'authorization_code'
+        access_token_signed_response_alg: 'none'
+        userinfo_signed_response_alg: 'none'
+        token_endpoint_auth_method: 'client_secret_basic'
+      - client_id: 'lissen_app'
+        client_name: 'Lissen Music Player'
+        public: true  # Mobile apps are often 'public' clients
+        authorization_policy: 'two_factor'
+        require_pkce: true
+        pkce_challenge_method: 'S256'
+        redirect_uris:
+          - 'lissen://oauth'
+        scopes:
+          - 'openid'
+          - 'profile'
+          - 'email'
+

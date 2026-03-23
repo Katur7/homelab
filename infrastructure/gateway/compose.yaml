@@ -1,0 +1,143 @@
+# Gateway Stack
+# Traefik reverse-proxy, CrowdSec WAF, Redis session store, Authelia SSO
+#
+# Networks defined here — consumed by all service stacks as external.
+# Volume crowdsec-db declared external to preserve data across stack migrations.
+
+networks:
+  traefik_internal:
+    name: traefik_internal
+    ipam:
+      config:
+        - subnet: 172.24.0.0/24
+  traefik_tunnel:
+    name: traefik_tunnel
+    ipam:
+      config:
+        - subnet: 172.25.0.0/24
+  socket_proxy:
+    name: socket_proxy
+    internal: true
+
+volumes:
+  crowdsec-db:
+    external: true
+    name: traefik_crowdsec-db
+
+services:
+
+  # ── Socket Proxy ──────────────────────────────────────────────────────────────
+  # Exposes a filtered Docker socket to Traefik — no direct socket access
+  socket-proxy:
+    image: wollomatic/socket-proxy:1
+    container_name: socket-proxy
+    environment:
+      - SP_LISTENIP=0.0.0.0
+      - SP_ALLOWFROM=0.0.0.0/0
+      - SP_ALLOW_GET=(/v1\..{1,2})?/(version|containers/.*|networks|nodes|services|system/df|events.*|images/.*)
+      - SP_ALLOW_HEAD=/_ping
+    networks:
+      - socket_proxy
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    security_opt:
+      - no-new-privileges:true
+    user: "65534:992"
+    restart: unless-stopped
+
+  # ── CrowdSec WAF ─────────────────────────────────────────────────────────────
+  # Reads Traefik access logs and makes ban decisions via LAPI
+  crowdsec:
+    image: crowdsecurity/crowdsec:v1.7.6
+    container_name: crowdsec
+    env_file:
+      - ../../global.env
+      - vars.env
+    environment:
+      - GID=0
+      - UID=0
+      - COLLECTIONS=crowdsecurity/traefik crowdsecurity/appsec-virtual-patching crowdsecurity/appsec-generic-rules crowdsecurity/http-cve crowdsecurity/base-http-scenarios
+      - LAPI_LISTEN_PORT=8081
+    volumes:
+      - ./config/crowdsec:/etc/crowdsec
+      - crowdsec-db:/var/lib/crowdsec/data
+      - ./logs:/var/log/traefik:ro
+    networks:
+      - traefik_internal
+    restart: unless-stopped
+
+  # ── Redis ─────────────────────────────────────────────────────────────────────
+  # Session store for Authelia
+  redis:
+    image: redis:8.6-alpine
+    container_name: redis
+    command: redis-server --save 60 1 --loglevel warning --requirepass ${REDIS_PASSWORD}
+    networks:
+      - traefik_internal
+    restart: unless-stopped
+
+  # ── Authelia ──────────────────────────────────────────────────────────────────
+  # SSO / OIDC provider for all protected services
+  authelia:
+    image: authelia/authelia:4.39
+    container_name: authelia
+    env_file:
+      - ../../global.env
+      - vars.env
+    environment:
+      - AUTHELIA_IDENTITY_VALIDATION_RESET_PASSWORD_JWT_SECRET=${AUTHELIA_JWT_SECRET}
+      - AUTHELIA_SESSION_SECRET=${AUTHELIA_SESSION_SECRET}
+      - AUTHELIA_SESSION_REDIS_PASSWORD=${REDIS_PASSWORD}
+      - AUTHELIA_STORAGE_ENCRYPTION_KEY=${AUTHELIA_ENCRYPTION_KEY}
+      - X_AUTHELIA_CONFIG_FILTERS=template
+    volumes:
+      - ./config/authelia:/config
+    networks:
+      - traefik_internal
+    restart: unless-stopped
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.authelia.rule=Host(`auth.pippinn.me`)"
+      - "traefik.http.routers.authelia.entrypoints=websecure,tunnel"
+
+  # ── Traefik Reverse Proxy ─────────────────────────────────────────────────────
+  # Ingress for all services — depends on socket-proxy and crowdsec
+  reverse-proxy:
+    image: traefik:v3.6
+    container_name: traefik-proxy
+    security_opt:
+      - no-new-privileges:true
+    depends_on:
+      - socket-proxy
+      - crowdsec
+    networks:
+      - traefik_internal
+      - traefik_tunnel
+      - socket_proxy
+    ports:
+      - "80:80"
+      - "443:443/tcp"
+      - "443:443/udp"
+      - "8443:8443"
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.traefik-internal.entrypoints=websecure"
+      - "traefik.http.routers.traefik-internal.rule=Host(`traefik.internal.pippinn.me`)"
+      - "traefik.http.routers.traefik-internal.tls.certresolver=dns-cloudflare"
+      - "traefik.http.routers.traefik-internal.service=api@internal"
+      - wud.tag.include=^v\d+$
+    env_file:
+      - ../../global.env
+      - vars.env
+      - .env
+    environment:
+      - CF_DNS_API_TOKEN=${CLOUDFLARE_TOKEN}
+    volumes:
+      - /etc/localtime:/etc/localtime:ro
+      - ./config/traefik.yml:/traefik.yml:ro
+      - ./config/acme.json:/acme.json
+      - ./config/dynamic:/dynamic:ro
+      - ./logs/access.log:/var/log/traefik/access.log
+    extra_hosts:
+      - host.docker.internal:172.17.0.1
+    restart: always

@@ -1,6 +1,6 @@
 # Secrets and Environments
-*.env
-!*.env.example
+# Only ignore files named exactly '.env' — vars.env and global.env are tracked
+.env
 
 # OS generated files
 .DS_Store
@@ -8,8 +8,30 @@
 
 # Docker Data
 volumes/
+
+# Service configs (runtime data, not git-tracked)
 /services/*/config/
-/infrastructure/*/config/
+
+# Gateway — sensitive runtime files only (most config IS git-tracked)
+/infrastructure/gateway/config/acme.json
+/infrastructure/gateway/config/authelia/db.sqlite3
+/infrastructure/gateway/config/authelia/notification.txt
+/infrastructure/gateway/config/authelia/secrets/
+/infrastructure/gateway/logs/
+
+# CrowdSec — hub-managed files (auto-downloaded at startup, not our config)
+/infrastructure/gateway/config/crowdsec/hub/
+/infrastructure/gateway/config/crowdsec/collections/
+/infrastructure/gateway/config/crowdsec/parsers/
+/infrastructure/gateway/config/crowdsec/scenarios/
+/infrastructure/gateway/config/crowdsec/postoverflows/
+/infrastructure/gateway/config/crowdsec/contexts/
+/infrastructure/gateway/config/crowdsec/patterns/
+/infrastructure/gateway/config/crowdsec/appsec-configs/
+/infrastructure/gateway/config/crowdsec/appsec-rules/
+# CrowdSec — runtime credentials (auto-generated, contain API keys)
+/infrastructure/gateway/config/crowdsec/local_api_credentials.yaml
+/infrastructure/gateway/config/crowdsec/online_api_credentials.yaml
 
 # IDE files
 .vscode/

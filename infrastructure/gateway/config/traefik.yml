@@ -1,0 +1,85 @@
+global:
+  checkNewVersion: true
+  sendAnonymousUsage: true
+
+# Log information
+log:
+  level: INFO  # DEBUG, INFO, WARNING, ERROR, CRITICAL
+  format: common
+
+# Accesslog
+accesslog:
+  format: common
+  filePath: /var/log/traefik/access.log
+  fields:
+    names:
+      RouterName: keep
+  # filters.statusCodes=204-299,400-499,500-599  # Only log abnormal status codes
+
+# Enable API and Dashboard
+api:
+  dashboard: true  # true by default
+  insecure: false  # Don't do this in production! Enables the web UI
+
+experimental:
+  plugins:
+    bouncer:
+      moduleName: "github.com/maxlerebourg/crowdsec-bouncer-traefik-plugin"
+      version: "v1.5.1" # Check for the latest version on the plugin page
+
+providers:
+  docker:
+    # Use docker socket proxy
+    endpoint: "tcp://socket-proxy:2375"
+    exposedByDefault: false  # Default is true
+    network: traefik_internal
+  file:
+    watch: true
+    directory: /dynamic
+
+# Entry Points configuration
+entryPoints:
+  web:
+    address: :80
+    http:
+      redirections:
+        entryPoint:
+          to: websecure
+          scheme: https
+  websecure:
+    address: :443
+    http3: {}
+    http:
+      middlewares:
+        - internal-only@file
+      tls:
+        certResolver: dns-cloudflare
+        domains:
+          - main: "pippinn.me"
+            sans:
+              - "*.pippinn.me"
+              - "*.internal.pippinn.me"
+  tunnel:
+    address: :8443
+    forwardedHeaders:
+      trustedIPs:
+        - 127.0.0.1/32
+        - 172.16.0.0/12  # This covers the subnet used by the cloudflared container
+    http:
+      middlewares:
+        - external-no-auth-chain@file
+      tls:
+        certResolver: dns-cloudflare
+
+certificatesResolvers:
+  dns-cloudflare:
+    acme: 
+      email: grimurk@gmail.com
+      # caServer: https://acme-staging-v02.api.letsencrypt.org/directory # LetsEncrypt Staging Server
+      storage: /acme.json
+      dnsChallenge:
+        provider: cloudflare
+        resolvers:
+          - "1.1.1.1:53"
+          - "1.0.0.1:53"
+        delayBeforeCheck: 30

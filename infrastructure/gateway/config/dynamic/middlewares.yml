@@ -1,0 +1,53 @@
+http:
+  middlewares:
+    internal-only:
+      ipAllowList:
+        sourceRange:
+          - "192.168.86.0/24"   # LAN
+          - "127.0.0.1/32"      # localhost/healthchecks
+          - "172.24.0.0/24"     # traefik_internal to allow other containers to connect
+
+    crowdsec:
+      plugin:
+        bouncer:
+          enabled: true
+          crowdsecMode: stream # 'stream' is best for performance
+          crowdsecLapiHost: "crowdsec:8081"
+          crowdsecLapiKey: "REDACTED_LAPI_KEY"
+          
+          # Optional: What to do if CrowdSec is down (true = allow traffic)
+          updateIntervalSeconds: 300
+          defaultDecision: allow
+          # APPSEC SETTINGS:
+          crowdsecAppsecEnabled: true
+          crowdsecAppsecHost: "crowdsec:7422"
+
+    my-rate-limit:
+      rateLimit:
+        average: 100
+        burst: 200
+
+    authelia-auth:
+      forwardAuth:
+        address: http://authelia:9091/api/verify?rd=https://auth.pippinn.me
+        trustForwardHeader: true
+        maxResponseBodySize: 4096
+        authResponseHeaders:
+          - Remote-User
+          - Remote-Groups
+          - Remote-Name
+          - Remote-Email
+
+    external-auth-chain:
+      chain:
+        middlewares:
+          - crowdsec
+          - my-rate-limit
+          - authelia-auth
+
+    external-no-auth-chain:
+      chain:
+        middlewares:
+          - crowdsec
+          - my-rate-limit
+

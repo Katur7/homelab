@@ -1,0 +1,42 @@
+# Cloudflare Stack
+# cloudflared tunnel client + DDNS updater
+#
+# Depends on the traefik_tunnel network defined in infrastructure/gateway/compose.yaml.
+# Run the gateway stack first.
+
+networks:
+  traefik_tunnel:
+    external: true
+
+services:
+
+  # ── Cloudflare Tunnel ─────────────────────────────────────────────────────────
+  # Tunnels external traffic to Traefik via the traefik_tunnel network
+  cloudflared:
+    image: cloudflare/cloudflared:2026.3.0
+    container_name: cloudflared
+    networks:
+      - traefik_tunnel
+    command:
+      - tunnel
+      - --no-autoupdate
+      - run
+    env_file:
+      - .env
+    restart: unless-stopped
+
+  # ── Cloudflare DDNS ───────────────────────────────────────────────────────────
+  # Keeps vpn.pippinn.me A record pointing to the current public IP
+  # CLOUDFLARE_API_TOKEN env var overrides api_token field in config.json
+  cloudflare-ddns:
+    image: timothyjmiller/cloudflare-ddns:2.0.8
+    container_name: cloudflare-ddns
+    networks:
+      - traefik_tunnel
+    security_opt:
+      - no-new-privileges:true
+    env_file:
+      - ../../global.env
+      - vars.env
+      - .env
+    restart: unless-stopped
