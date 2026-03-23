@@ -29,7 +29,7 @@ All services must reference `../../global.env` for shared variables.
 - **Archive prefix:** `homelab-`
 - **Schedule:** Daily at 02:00
 - **Retention:** 7 daily / 4 weekly / 3 monthly
-- **Exclusions:** `volumes/`, `.git/objects/pack/`
+- **Exclusions:** `volumes/` only (`.git/` backed up in full for complete history recovery)
 
 ### Verify Backup Health
 ```bash

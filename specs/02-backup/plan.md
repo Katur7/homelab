@@ -36,11 +36,11 @@ Configure a new job in the OMV UI with the following settings:
 
 ```
 volumes/
-**/.git/objects/pack/
 ```
 
 - `volumes/` — Docker volume bind-mount data (bulk, not config)
-- `.git/objects/pack/` — Large binary packfiles; the working tree is sufficient for recovery
+
+`.git/` is backed up in full. This repo will stay small (text configs only), so git will never accumulate large packfiles. Backing up `.git/` provides complete history recovery, not just a working tree snapshot.
 
 ### Retention Policy
 
