@@ -1,0 +1,25 @@
+# Tailscale
+# Mesh VPN — kernel mode (TS_USERSPACE=false), authenticated via auth key
+
+networks:
+  traefik_internal:
+    external: true
+
+services:
+  tailscale:
+    image: tailscale/tailscale:stable
+    container_name: tailscale
+    hostname: pippinn
+    env_file:
+      - ../../global.env
+      - vars.env
+      - .env
+    volumes:
+      - ./state:/var/lib/tailscale
+    devices:
+      - /dev/net/tun:/dev/net/tun
+    cap_add:
+      - net_admin
+    networks:
+      - traefik_internal
+    restart: unless-stopped

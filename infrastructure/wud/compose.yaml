@@ -1,0 +1,26 @@
+# What's Up Docker (WUD)
+# Monitors container images for available updates via socket-proxy
+
+networks:
+  traefik_internal:
+    external: true
+  socket_proxy:
+    external: true
+
+services:
+  whatsupdocker:
+    image: getwud/wud:8.2.2
+    container_name: update
+    env_file:
+      - ../../global.env
+      - vars.env
+      - .env
+    networks:
+      - traefik_internal
+      - socket_proxy
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.wud.entrypoints=websecure"
+      - "traefik.http.routers.wud.rule=Host(`update.internal.pippinn.me`)"
+      - "traefik.docker.network=traefik_internal"
+    restart: unless-stopped

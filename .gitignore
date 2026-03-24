@@ -36,6 +36,12 @@ volumes/
 # PiHole — entire config volume is runtime state (gravity.db, pihole.toml, logs, etc.)
 /infrastructure/dns/config/
 
+# Tailscale — binary runtime state
+/infrastructure/tailscale/state/
+
+# WireGuard — server + peer private keys (auto-generated on first run)
+/infrastructure/wireguard/config/
+
 # IDE files
 .vscode/
 .idea/
