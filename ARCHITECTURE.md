@@ -42,32 +42,10 @@ All services must reference `../../global.env` for shared variables.
 ## 🔒 Backup Strategy
 
 ### Homelab Repository Backup (Milestone 02)
+- **Tool:** OMV BorgBackup plugin
 - **Source:** `/home/grimur/homelab/`
-- **Destination:** Existing local Borg repository on NAS share (`/srv/dev-disk-by-uuid-0ddafbf7-f06d-424d-8e9c-95d97fbd4484/backup/borg/`)
-- **Method:** OMV BorgBackup plugin — job configured via OMV UI
-- **Archive prefix:** `homelab-`
-- **Schedule:** Daily at 02:00
-- **Retention:** 7 daily / 4 weekly / 3 monthly
-- **Exclusions:**
-  - `volumes/` — Docker volume data
-  - `infrastructure/gateway/logs/` — runtime access logs
-  - `infrastructure/gateway/config/authelia/secrets/` — OIDC private key
-  - CrowdSec hub-managed content (auto-downloaded at startup, not our config):
-    - `infrastructure/gateway/config/crowdsec/hub/`
-    - `infrastructure/gateway/config/crowdsec/collections/`
-    - `infrastructure/gateway/config/crowdsec/parsers/`
-    - `infrastructure/gateway/config/crowdsec/scenarios/`
-    - `infrastructure/gateway/config/crowdsec/postoverflows/`
-    - `infrastructure/gateway/config/crowdsec/contexts/`
-    - `infrastructure/gateway/config/crowdsec/patterns/`
-    - `infrastructure/gateway/config/crowdsec/appsec-configs/`
-    - `infrastructure/gateway/config/crowdsec/appsec-rules/`
-  - `.git/` backed up in full for complete history recovery
+- **Destination:** Local Borg repo on NAS share
+- **Schedule:** Daily at 02:00 — retention: 7 daily / 4 weekly / 3 monthly
+- **Note:** Local-only; offsite is a future milestone.
 
-### Verify Backup Health
-```bash
-borg list /srv/dev-disk-by-uuid-0ddafbf7-f06d-424d-8e9c-95d97fbd4484/backup/borg/
-```
-Look for recent `homelab-YYYY-MM-DD` archives.
-
-> ⚠️ **Note:** This is a local-only backup. An offsite destination is a future milestone.
+> Full details in [`specs/02-backup/`](specs/02-backup/).
