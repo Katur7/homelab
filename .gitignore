@@ -33,6 +33,9 @@ volumes/
 /infrastructure/gateway/config/crowdsec/local_api_credentials.yaml
 /infrastructure/gateway/config/crowdsec/online_api_credentials.yaml
 
+# PiHole — entire config volume is runtime state (gravity.db, pihole.toml, logs, etc.)
+/infrastructure/dns/config/
+
 # IDE files
 .vscode/
 .idea/

@@ -1,0 +1,49 @@
+# DNS Stack
+# PiHole v6 — NAS instance (PRIMARY for nebula-sync)
+# Pi PiHole (192.168.86.26) is the replica — managed separately on the Pi.
+#
+# pihole_network: macvlan giving PiHole a dedicated LAN IP (192.168.86.27)
+# traefik_internal: for Traefik web UI routing
+
+networks:
+  pihole_network:
+    name: pihole_network
+    driver: macvlan
+    driver_opts:
+      parent: enp4s0
+    enable_ipv6: true
+    ipam:
+      config:
+        - gateway: 192.168.86.1
+          subnet: 192.168.86.0/24
+        - subnet: 2001:9b1:c5c0:7e00::/64
+          # Google Wifi uses a link-local gateway address that docker does not support
+          # So we omit the gateway here; pihole cannot connect outside the subnet using ipv6
+  traefik_internal:
+    external: true
+
+services:
+  pihole:
+    image: pihole/pihole:2026.02.0
+    container_name: pihole
+    hostname: pihole
+    env_file:
+      - ../../global.env
+      - vars.env
+      - .env
+    dns:
+      - 127.0.0.1
+      - 1.1.1.1
+    networks:
+      pihole_network:
+        ipv4_address: 192.168.86.27
+        ipv6_address: 2001:9b1:c5c0:7e00::10
+      traefik_internal: {}
+    volumes:
+      - ./config:/etc/pihole
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.pihole-internal.entrypoints=websecure"
+      - "traefik.http.routers.pihole-internal.rule=Host(`pihole.internal.pippinn.me`)"
+      - "traefik.http.services.pihole.loadbalancer.server.port=80"
+    restart: always
