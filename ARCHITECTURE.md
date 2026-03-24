@@ -49,3 +49,18 @@ All services must reference `../../global.env` for shared variables.
 - **Note:** Local-only; offsite is a future milestone.
 
 > Full details in [`specs/02-backup/`](specs/02-backup/).
+
+## 🔧 Scripts & Tooling
+
+### `scripts/add-dns.sh` — Add Local DNS Record
+Adds an A + AAAA record for `<service>.pippinn.me` to PiHole via the v6 REST API.
+Points to the NAS/Traefik gateway: IPv4 `192.168.86.17`, IPv6 `2001:9b1:c5c0:7e00:16da:e9ff:fe68:6362`.
+
+**Usage:**
+```bash
+./scripts/add-dns.sh <service-name>
+# Example: ./scripts/add-dns.sh jellyfin
+# → Creates jellyfin.pippinn.me → 192.168.86.17 + 2001:9b1:c5c0:7e00:16da:e9ff:fe68:6362
+```
+
+**Password:** Set `$PIHOLE_PASSWORD` env var, or the script auto-reads `infrastructure/dns/.env`.
