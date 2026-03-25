@@ -1,0 +1,50 @@
+name: vikunja
+
+services:
+  vikunja:
+    image: vikunja/vikunja:2.2.2
+    container_name: vikunja
+    user: 1000:100
+    restart: unless-stopped
+    networks:
+      - traefik_internal
+      - default
+    env_file:
+      - vars.env
+      - .env
+    volumes:
+      - ./files:/app/vikunja/files
+    depends_on:
+      db:
+        condition: service_healthy
+    labels:
+      - "traefik.enable=true"
+
+      # Internal
+      - "traefik.http.routers.todo-internal.entrypoints=websecure"
+      - "traefik.http.routers.todo-internal.rule=Host(`todo.pippinn.me`)"
+
+      # Tunnel
+      - "traefik.http.routers.todo-tunnel.entrypoints=tunnel"
+      - "traefik.http.routers.todo-tunnel.rule=Host(`todo.pippinn.me`)"
+      - "traefik.http.routers.todo-tunnel.middlewares=authelia-auth@file"
+
+  db:
+    image: postgres:17
+    container_name: vikunja-db
+    restart: unless-stopped
+    networks:
+      - default
+    env_file:
+      - .env
+    volumes:
+      - ./db:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -h localhost -U vikunja"]
+      interval: 30s
+    labels:
+      - "wud.tag.include=^\\d+\\.\\d+$$"
+
+networks:
+  traefik_internal:
+    external: true
