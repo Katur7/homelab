@@ -1,0 +1,42 @@
+name: audiobookshelf
+
+services:
+  audiobookshelf:
+    image: ghcr.io/advplyr/audiobookshelf:2.33.1
+    container_name: audiobookshelf
+    restart: unless-stopped
+    networks:
+      - traefik_internal
+    env_file:
+      - ../../global.env
+    volumes:
+      - ./config:/config
+      - ./metadata:/metadata
+      - /srv/dev-disk-by-uuid-f1209e02-5b26-491f-ac40-f951e9ddfbb0/books/audiobooks:/audiobooks
+      - /srv/dev-disk-by-uuid-f1209e02-5b26-491f-ac40-f951e9ddfbb0/books/ebooks:/ebooks
+    labels:
+      - "traefik.enable=true"
+
+      # Internal
+      - "traefik.http.routers.audiobookshelf-internal.entrypoints=websecure"
+      - "traefik.http.routers.audiobookshelf-internal.rule=Host(`audiobookshelf.pippinn.me`)"
+
+      # Tunnel — default (Authelia)
+      - "traefik.http.routers.audiobookshelf-tunnel.entrypoints=tunnel"
+      - "traefik.http.routers.audiobookshelf-tunnel.rule=Host(`audiobookshelf.pippinn.me`)"
+      - "traefik.http.routers.audiobookshelf-tunnel.middlewares=authelia-auth@file"
+      - "traefik.http.routers.audiobookshelf-tunnel.priority=100"
+
+      # Lissen app bypass — header secret
+      - "traefik.http.routers.audiobookshelf-handshake.entrypoints=tunnel"
+      - "traefik.http.routers.audiobookshelf-handshake.rule=Host(`audiobookshelf.pippinn.me`) && Header(`X-Lissen-Secret`, `${LISSEN_APP_SECRET}`)"
+      - "traefik.http.routers.audiobookshelf-handshake.priority=200"
+
+      # Lissen discovery bypass — specific API paths
+      - "traefik.http.routers.audiobookshelf-discovery.entrypoints=tunnel"
+      - "traefik.http.routers.audiobookshelf-discovery.rule=Host(`audiobookshelf.pippinn.me`) && (Path(`/status`) || Path(`/api/languages`) || Path(`/api/server/settings`))"
+      - "traefik.http.routers.audiobookshelf-discovery.priority=150"
+
+networks:
+  traefik_internal:
+    external: true
