@@ -116,3 +116,33 @@ network stack.
   entry becomes redundant and can be removed.
 
 ---
+
+## Q4: Android Chrome Intercepts Passkey Creation — Cannot Save to Bitwarden
+
+**Symptom:** When registering a passkey on Authelia from Android Chrome, Chrome
+always intercepts the WebAuthn `navigator.credentials.create()` call and presents
+its own passkey manager (Google Password Manager). There is no option to redirect
+to a third-party provider such as Bitwarden. The passkey cannot be saved to
+Bitwarden on Android Chrome.
+
+**Status: No fix found.** The Authelia passkey is stored in Chrome's built-in
+passkey manager (synced via Google account) rather than Bitwarden.
+
+**Root cause:** Android's FIDO2 credential provider model changed in Android 14.
+Prior to that, Chrome on Android exclusively used its own passkey manager with no
+way to delegate to a third-party. Android 14+ introduced the Credential Manager
+API which *should* allow choosing a provider (Bitwarden, 1Password, etc.), but
+Chrome's passkey sheet does not always surface the provider picker — particularly
+on first registration — and falls back silently to Google Password Manager.
+
+**Workarounds tried:** None resolved the issue. Potential avenues if revisiting:
+- Ensure Bitwarden is set as the **default** autofill and passkey provider in
+  Android Settings → Passwords & Accounts → Preferred service.
+- Use **Firefox for Android** instead of Chrome — Firefox delegates to the system
+  Credential Manager picker more reliably.
+- Use the **Bitwarden app's built-in browser** to trigger the passkey registration.
+
+**Current state:** The Authelia passkey lives in Chrome/Google Password Manager.
+Login from Android works; it just isn't portable to Bitwarden.
+
+---
