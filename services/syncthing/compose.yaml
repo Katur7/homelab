@@ -1,0 +1,33 @@
+name: syncthing
+
+services:
+  syncthing:
+    image: ghcr.io/linuxserver/syncthing:v2.0.15-ls211
+    container_name: syncthing
+    restart: unless-stopped
+    networks:
+      - traefik_internal
+    env_file:
+      - ../../global.env
+    ports:
+      - "22000:22000/tcp"
+      - "22000:22000/udp"
+      - "21027:21027/udp"
+    volumes:
+      - ./config:/config
+      - /srv/dev-disk-by-uuid-f1209e02-5b26-491f-ac40-f951e9ddfbb0/syncthing:/syncthing
+      - /srv/dev-disk-by-uuid-f1209e02-5b26-491f-ac40-f951e9ddfbb0/code:/code
+      - /srv/dev-disk-by-uuid-0ddafbf7-f06d-424d-8e9c-95d97fbd4484/backup:/backup
+      - /srv/dev-disk-by-uuid-f1209e02-5b26-491f-ac40-f951e9ddfbb0/books:/books
+      - /srv/dev-disk-by-uuid-0ddafbf7-f06d-424d-8e9c-95d97fbd4484/kids:/kids
+      - /srv/dev-disk-by-uuid-f1209e02-5b26-491f-ac40-f951e9ddfbb0/movies:/movies
+      - /srv/dev-disk-by-uuid-220b73c9-2682-4822-b871-cb499733b15b/tv:/tv
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.sync-internal.entrypoints=websecure"
+      - "traefik.http.routers.sync-internal.rule=Host(`sync.internal.pippinn.me`)"
+      - "traefik.http.services.sync.loadbalancer.server.port=8384"
+
+networks:
+  traefik_internal:
+    external: true
