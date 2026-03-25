@@ -1,0 +1,33 @@
+name: plex
+
+services:
+  plex:
+    image: ghcr.io/linuxserver/plex:1.43.0.10492-121068a07-ls297
+    container_name: plex
+    restart: unless-stopped
+    networks:
+      - traefik_internal
+    env_file:
+      - ../../global.env
+      - vars.env
+    ports:
+      - "32400:32400"
+      - "32410:32410/udp"
+      - "32412:32412/udp"
+      - "32413:32413/udp"
+      - "32414:32414/udp"
+    volumes:
+      - ./config:/config
+      - /srv/dev-disk-by-uuid-0ddafbf7-f06d-424d-8e9c-95d97fbd4484/kids:/kids
+      - /srv/dev-disk-by-uuid-f1209e02-5b26-491f-ac40-f951e9ddfbb0/movies:/movies
+      - /srv/dev-disk-by-uuid-220b73c9-2682-4822-b871-cb499733b15b/tv:/tv
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.plex-internal.entrypoints=websecure"
+      - "traefik.http.routers.plex-internal.rule=Host(`plex.internal.pippinn.me`)"
+      - "traefik.http.services.plex.loadbalancer.server.port=32400"
+      - "traefik.docker.network=traefik_internal"
+
+networks:
+  traefik_internal:
+    external: true

@@ -9,8 +9,22 @@
 # Docker Data
 volumes/
 
-# Service configs (runtime data, not git-tracked)
-/services/*/config/
+# Service state (runtime data, gitignored — covered by BorgBackup)
+/services/mealie/data/
+/services/calibre-web/config/
+/services/plex/config/
+/services/starr/radarr-config/
+/services/starr/sonarr-config/
+/services/starr/prowlarr-config/
+/services/starr/qbittorrent-config/
+/services/syncthing/config/
+/services/vikunja/files/
+/services/vikunja/db/
+/services/audiobookshelf/config/
+/services/audiobookshelf/metadata/
+/services/home-assistant/config/
+/services/home-assistant/matter-server/
+/services/immich/database/
 
 # Gateway — sensitive runtime files only (most config IS git-tracked)
 /infrastructure/gateway/config/acme.json

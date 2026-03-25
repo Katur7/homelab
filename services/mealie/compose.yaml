@@ -1,0 +1,29 @@
+name: mealie
+
+services:
+  mealie:
+    image: ghcr.io/mealie-recipes/mealie:v3.13.1
+    container_name: mealie
+    restart: unless-stopped
+    networks:
+      - traefik_internal
+    env_file:
+      - ../../global.env
+      - vars.env
+    volumes:
+      - ./data:/app/data
+    deploy:
+      resources:
+        limits:
+          memory: 500M
+    healthcheck:
+      interval: 10m
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.mealie.entrypoints=websecure"
+      - "traefik.http.routers.mealie.rule=Host(`mealie.internal.pippinn.me`)"
+      - "traefik.docker.network=traefik_internal"
+
+networks:
+  traefik_internal:
+    external: true

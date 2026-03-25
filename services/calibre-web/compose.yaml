@@ -1,0 +1,24 @@
+name: calibre-web
+
+services:
+  calibre-web:
+    image: ghcr.io/linuxserver/calibre-web:0.6.26-ls375
+    container_name: calibre-web
+    restart: unless-stopped
+    networks:
+      - traefik_internal
+    env_file:
+      - ../../global.env
+      - vars.env
+    volumes:
+      - ./config:/config
+      - /srv/dev-disk-by-uuid-f1209e02-5b26-491f-ac40-f951e9ddfbb0/books/ebooks:/ebooks:ro
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.calibre-web.entrypoints=websecure"
+      - "traefik.http.routers.calibre-web.rule=Host(`ebooks.internal.pippinn.me`)"
+      - "traefik.docker.network=traefik_internal"
+
+networks:
+  traefik_internal:
+    external: true
