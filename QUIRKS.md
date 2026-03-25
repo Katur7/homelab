@@ -156,6 +156,53 @@ bypass for the app and let it handle its own OIDC/API-key authentication.
 
 ---
 
+## Q6: Official Audiobookshelf App Cannot Be Used Through the Tunnel
+
+**Symptom:** The official Audiobookshelf Android/iOS app cannot connect to the
+server when it is protected by Authelia `forwardAuth` on the tunnel, and unlike
+Immich there is no way to work around this — the official app does not support
+adding custom HTTP headers to its requests.
+
+**Why the header-secret bypass doesn't work here:**
+
+The Immich workaround (Q5) relies on the app sending a shared secret in a custom
+header (e.g. `X-Immich-Secret`), which a higher-priority Traefik router matches
+to bypass `forwardAuth`. The official Audiobookshelf app has no setting to
+attach custom headers to API requests, so the secret can never be sent and the
+bypass router is never matched. Every request hits the default tunnel router and
+gets redirected to the Authelia login page, which the app cannot handle.
+
+**Upstream status:** Custom header support has been requested in
+[advplyr/audiobookshelf-app#254](https://github.com/advplyr/audiobookshelf-app/issues/254)
+and a PR exists at
+[advplyr/audiobookshelf-app#1768](https://github.com/advplyr/audiobookshelf-app/pull/1768).
+If that PR is merged, the official app could replace Lissen using the same
+header-secret bypass pattern.
+
+**Fix: Switch to [Lissen](https://github.com/maaudran/lissen-android)**
+
+Lissen is a third-party Audiobookshelf client that supports configuring custom
+HTTP headers. Setting `X-Lissen-Secret: <secret>` in the app allows Traefik to
+match the bypass router before Authelia is invoked.
+
+**Current Traefik routing for Audiobookshelf on the tunnel
+([services/audiobookshelf/compose.yaml](services/audiobookshelf/compose.yaml)):**
+
+| Priority | Router | Rule | Middleware |
+|---|---|---|---|
+| 200 | `audiobookshelf-handshake` | Host + `X-Lissen-Secret` header match | none (bypass) |
+| 150 | `audiobookshelf-discovery` | Host + specific API paths (`/status`, `/api/languages`, `/api/server/settings`) | none (bypass) |
+| 100 | `audiobookshelf-tunnel` | Host only | `authelia-auth` |
+
+The discovery bypass (priority 150) is needed because Lissen probes those paths
+before it has a chance to attach the secret header during initial server setup.
+
+**Lesson:** Before planning a tunnel strategy for a mobile app, verify that the
+app supports custom request headers. If it does not, a header-secret bypass is
+not possible and an alternative client must be found.
+
+---
+
 ## Q4: Android Chrome Intercepts Passkey Creation — Cannot Save to Bitwarden
 
 **Symptom:** When registering a passkey on Authelia from Android Chrome, Chrome
