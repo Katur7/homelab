@@ -35,9 +35,18 @@ All services must reference `../../global.env` for shared variables.
 - Must be explicitly added to the `tunnel` entrypoint via a label
 
 ## 💾 Volume Management
-- **Configs:** Stored locally in `./config` within the service folder for portability.
-- **Bulk Data:** Absolute paths to OMV-managed shares (e.g., `/srv/dev-disk-by-uuid-...`).
-- **Permissions:** All containers should use `PUID=1000` and `PGID=100` (User: grimur, Group: users).
+
+All service config and state data lives inside the service folder under `services/<service>/`.
+These subdirectories are **gitignored** (binary data, secrets, large files) but covered
+by the BorgBackup job which sources `/home/grimur/homelab/`.
+
+| Type | Location | Git-tracked? | Backed up? |
+|------|----------|-------------|------------|
+| Compose definition | `services/<service>/compose.yaml` | ✅ Yes | ✅ Yes |
+| Non-secret config | `services/<service>/vars.env` | ✅ Yes | ✅ Yes |
+| Secrets | `services/<service>/.env` | ❌ No (gitignored) | ✅ Yes |
+| App state / config dirs | `services/<service>/<data>/` | ❌ No (gitignored) | ✅ Yes |
+| Bulk media (photos, video, books) | `/srv/dev-disk-by-uuid-<id>/` | ❌ No | ❌ Separate strategy |
 
 ## 🔒 Backup Strategy
 

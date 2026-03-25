@@ -1,0 +1,83 @@
+name: immich
+
+services:
+  immich-server:
+    image: ghcr.io/immich-app/immich-server:${IMMICH_VERSION:-v2.6.1}
+    container_name: immich_server
+    restart: unless-stopped
+    networks:
+      - traefik_internal
+      - default
+    env_file:
+      - ../../global.env
+      - vars.env
+      - .env
+    volumes:
+      - /srv/dev-disk-by-uuid-0ddafbf7-f06d-424d-8e9c-95d97fbd4484/photos:/data
+      - /etc/localtime:/etc/localtime:ro
+    depends_on:
+      - redis
+      - database
+    labels:
+      - "traefik.enable=true"
+      - "traefik.docker.network=traefik_internal"
+
+      # Internal
+      - "traefik.http.routers.photos-internal.entrypoints=websecure"
+      - "traefik.http.routers.photos-internal.rule=Host(`photos.pippinn.me`)"
+      
+      # Tunnel — default (Authelia)
+      - "traefik.http.routers.photos-tunnel.entrypoints=tunnel"
+      - "traefik.http.routers.photos-tunnel.rule=Host(`photos.pippinn.me`)"
+      - "traefik.http.routers.photos-tunnel.middlewares=authelia-auth@file"
+      - "traefik.http.routers.photos-tunnel.priority=100"
+      
+      # Mobile app bypass — header secret
+      - "traefik.http.routers.photos-app.entrypoints=tunnel"
+      - "traefik.http.routers.photos-app.rule=Host(`photos.pippinn.me`) && Header(`X-Immich-App-Secret`, `${IMMICH_APP_AUTH_BYPASS_SECRET}`)"
+      - "traefik.http.routers.photos-app.priority=150"
+      
+      # Login path bypass (OIDC + mobile redirect)
+      - "traefik.http.routers.photos-app-login.entrypoints=tunnel"
+      - "traefik.http.routers.photos-app-login.rule=Host(`photos.pippinn.me`) && (Path(`/.well-known/immich`) || Path(`/api/server/ping`))"
+      - "traefik.http.routers.photos-app-login.priority=200"
+
+  immich-machine-learning:
+    image: ghcr.io/immich-app/immich-machine-learning:${IMMICH_VERSION:-v2.6.1}
+    container_name: immich_machine_learning
+    restart: unless-stopped
+    networks:
+      - default
+    volumes:
+      - model-cache:/cache
+
+  redis:
+    image: valkey/valkey:8-bookworm@sha256:fea8b3e67b15729d4bb70589eb03367bab9ad1ee89c876f54327fc7c6e618571
+    container_name: immich_redis
+    restart: unless-stopped
+    networks:
+      - default
+
+  database:
+    image: ghcr.io/immich-app/postgres:14-vectorchord0.4.3-pgvectors0.2.0@sha256:41eacbe83eca995561fe43814fd4891e16e39632806253848efaf04d3c8a8b84
+    container_name: immich_postgres
+    restart: unless-stopped
+    networks:
+      - default
+    env_file:
+      - .env
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_DB: immich
+      POSTGRES_INITDB_ARGS: --data-checksums
+      DB_STORAGE_TYPE: SSD
+    volumes:
+      - ./database:/var/lib/postgresql/data
+
+volumes:
+  model-cache:
+    name: immich_model-cache
+
+networks:
+  traefik_internal:
+    external: true
