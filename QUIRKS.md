@@ -80,3 +80,39 @@ but not the apex `pippinn.me` itself. Adjust if needed.
   issues), this rule can be removed and Android will use QUIC cleanly.
 
 ---
+
+## Q3: Traefik Cannot Reach Host-Network Services — `host.docker.internal` on Linux
+
+**Symptom:** Traefik returns `502 Bad Gateway` when proxying to a service running
+directly on the host (e.g. Home Assistant in `network_mode: host`). The backend
+URL uses the hostname `host.docker.internal`, which resolves fine on Docker
+Desktop (Mac/Windows) but **does not exist by default on Linux**.
+
+**Affected service:** Home Assistant (runs on the host network, not in a
+container on `traefik_internal`).
+
+**Fix:** Add an `extra_hosts` entry to the Traefik container in
+[infrastructure/gateway/compose.yaml](infrastructure/gateway/compose.yaml):
+
+```yaml
+extra_hosts:
+  - host.docker.internal:172.17.0.1
+```
+
+`172.17.0.1` is the IP of the `docker0` bridge interface on the host — the
+address the host is reachable at from inside any container.
+
+**Why it works:** On Linux, Docker does not inject `host.docker.internal` into
+container `/etc/hosts`. The `extra_hosts` entry does it manually. Traefik can
+then resolve the hostname and forward traffic to services bound to the host
+network stack.
+
+**Side notes:**
+- `172.17.0.1` is the default `docker0` bridge IP. Verify with
+  `ip addr show docker0` if your host differs.
+- This entry only needs to exist in the Traefik container — other containers
+  that don't need to reach host-network services do not require it.
+- If HA is ever moved into a Docker network (e.g. `traefik_internal`), this
+  entry becomes redundant and can be removed.
+
+---
