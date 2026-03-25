@@ -117,6 +117,45 @@ network stack.
 
 ---
 
+## Q5: Authelia Forward Auth Cannot Double as Immich App Authentication
+
+**Symptom / Failed Experiment:** Attempted to route the Immich mobile app through
+the Cloudflare tunnel with Authelia `forwardAuth` enabled, expecting that an
+Authelia login would both protect the endpoint **and** establish an authenticated
+Immich session in the app. This does not work.
+
+**Current setup:** The Immich app bypasses Authelia on the tunnel via a shared
+header secret. The app authenticates directly to Immich (via OIDC or API key).
+Authelia guards the web UI only.
+
+**Why the combined flow fails:**
+
+Authelia's `forwardAuth` middleware, when triggered, issues a browser redirect to
+`auth.pippinn.me` and sets an `authelia_session` cookie on return. Neither of
+these is usable by a native mobile app:
+
+- The app has no cookie jar and cannot present an Authelia session cookie.
+- Even if the login completes, Authelia injects `Remote-User` / `Remote-Email`
+  headers into the upstream request — but Immich **does not support trusted
+  header auth**. It only accepts its own session JWTs or API keys.
+
+The Authelia session and the Immich session are entirely separate. There is no
+mechanism to bridge them automatically.
+
+**How Immich mobile auth actually works:**
+
+The mobile app uses a direct OIDC authorization code flow against Authelia:
+Authelia issues a code → Immich exchanges it for tokens → Immich creates its own
+session. This is why `/.well-known/immich` and `/api/oauth/mobile-redirect` are
+bypassed from `forwardAuth` — they must be reachable without triggering a
+redirect to the Authelia login page.
+
+**Lesson:** `forwardAuth` is a browser-session guard. It cannot inject usable
+auth context into native apps with their own auth systems. Use the header secret
+bypass for the app and let it handle its own OIDC/API-key authentication.
+
+---
+
 ## Q4: Android Chrome Intercepts Passkey Creation — Cannot Save to Bitwarden
 
 **Symptom:** When registering a passkey on Authelia from Android Chrome, Chrome
