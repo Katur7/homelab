@@ -22,7 +22,10 @@ volumes/
 /services/vikunja/db/
 /services/audiobookshelf/config/
 /services/audiobookshelf/metadata/
-/services/home-assistant/config/
+/services/home-assistant/config/*
+!/services/home-assistant/config/configuration.yaml
+!/services/home-assistant/config/sensors/
+!/services/home-assistant/config/templates/
 /services/home-assistant/matter-server/
 /services/immich/database/
 

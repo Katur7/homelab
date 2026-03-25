@@ -1,0 +1,51 @@
+- sensor:
+  - name: "Word of the Day Translations"
+    unique_id: word_of_the_day_translations
+    state: >
+      {% set translations = state_attr('sensor.word_of_the_day', 'translations') %}
+      {% if translations %}
+        {{ state_attr('sensor.word_of_the_day', 'translations') | join(', ') }}
+      {% else %}
+        None
+      {% endif %}
+- sensor:
+  - name: "Word of the Day Example 1 IS"
+    unique_id: word_of_the_day_example1_is
+    state: >
+      {% set ex = state_attr('sensor.word_of_the_day', 'examples') %}
+      {% if ex and ex|length > 0 %}
+        {{ ex[0]['is'] }}
+      {% else %}
+        None
+      {% endif %}
+- sensor:
+  - name: "Word of the Day Example 1 SE"
+    unique_id: word_of_the_day_example1_se
+    state: >
+      {% set ex = state_attr('sensor.word_of_the_day', 'examples') %}
+      {% if ex and ex|length > 0 %}
+        {{ ex[0]['se'] }}
+      {% else %}
+        None
+      {% endif %}
+- sensor:
+  - name: "Word of the Day Example 2 IS"
+    unique_id: word_of_the_day_example2_is
+    state: >
+      {% set ex = state_attr('sensor.word_of_the_day', 'examples') %}
+      {% if ex and ex|length > 1 %}
+        {{ ex[1]['is'] }}
+      {% else %}
+        None
+      {% endif %}
+- sensor:
+  - name: "Word of the Day Example 2 SE"
+    unique_id: word_of_the_day_example2_se
+    state: >
+      {% set ex = state_attr('sensor.word_of_the_day', 'examples') %}
+      {% if ex and ex|length > 1 %}
+        {{ ex[1]['se'] }}
+      {% else %}
+        None
+      {% endif %}
+

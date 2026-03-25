@@ -1,0 +1,12 @@
+- platform: rest
+  name: "Word of the Day"
+  unique_id: word_of_the_day
+  resource: https://ord-dagsins.pippinn.me
+  headers:
+    Content-Type: application/json
+  value_template: "{{ value_json.fletta }}"
+  json_attributes:
+    - fletta
+    - translations
+    - examples
+  scan_interval: 10800 # 3 hours

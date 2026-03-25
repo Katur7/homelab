@@ -1,0 +1,45 @@
+name: home-assistant
+
+services:
+  homeassistant:
+    image: ghcr.io/home-assistant/home-assistant:2026.3.2
+    container_name: homeassistant
+    restart: unless-stopped
+    network_mode: host
+    privileged: true
+    devices:
+      - /dev/ttyUSB0:/dev/ttyUSB0
+    volumes:
+      - ./config:/config
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.home-assistant.entrypoints=websecure,tunnel"
+      - "traefik.http.routers.home-assistant.rule=Host(`home-assistant.pippinn.me`)"
+      # host.docker.internal required because HA uses network_mode:host — Traefik cannot
+      # auto-discover the container IP on traefik_internal. host.docker.internal resolves
+      # to 172.17.0.1 (docker bridge / host) via extra_hosts in the gateway compose.
+      - "traefik.http.services.home-assistant.loadbalancer.server.url=http://host.docker.internal:8123"
+
+  matter-server:
+    image: ghcr.io/home-assistant-libs/python-matter-server:stable
+    container_name: matter-server
+    restart: unless-stopped
+    network_mode: host
+    volumes:
+      - ./matter-server:/data
+
+  ord_dagsins:
+    image: katur/ord_dagsins
+    container_name: ord_dagsins
+    restart: unless-stopped
+    networks:
+      - traefik_internal
+    labels:
+      - "traefik.enable=true"
+      - "traefik.docker.network=traefik_internal"
+      - "traefik.http.routers.ord-dagsins.entrypoints=websecure,tunnel"
+      - "traefik.http.routers.ord-dagsins.rule=Host(`ord-dagsins.pippinn.me`)"
+
+networks:
+  traefik_internal:
+    external: true

@@ -1,0 +1,51 @@
+- triggers:
+    - trigger: time_pattern
+      hours: /2
+  actions:
+    - action: weather.get_forecasts
+      target:
+        entity_id: weather.tomorrow_io_home_daily
+      data:
+        type: hourly
+      response_variable: hourly
+  sensor:
+    - name: "Expected Rain"
+      unique_id: expected_rain
+      icon: "mdi:weather-rainy"
+      state: >
+        {% set forecast = hourly
+            .get('weather.tomorrow_io_home_daily', {})
+            .get('forecast', []) %}
+
+        {% set today = now().date().isoformat() %}
+        {% set todays = forecast | selectattr('datetime', 'search', today) | list %}
+
+        {% if not todays %}
+          None
+        {% else %}
+          {% set total_rain = todays | map(attribute='precipitation') | sum %}
+          {% if total_rain == 0 %}
+            0
+          {% else %}
+            {% set ns = namespace(weighted=0) %}
+            {% for f in todays %}
+              {% set ns.weighted = ns.weighted + (f.precipitation * (f.precipitation_probability / 100)) %}
+            {% endfor %}
+            
+            {{ (ns.weighted / total_rain) | round(1) }}
+          {% endif %}
+        {% endif %}
+      attributes:
+        max_precipitation_probability: >
+          {% set forecast = hourly
+            .get('weather.tomorrow_io_home_daily', {})
+            .get('forecast', []) %}
+
+          {% set today = now().date().isoformat() %}
+          {% set todays = forecast | selectattr('datetime', 'search', today) | list %}
+
+          {% if not todays %}
+            None
+          {% else %}
+            {{ todays | map(attribute='precipitation_probability') | max / 100 }}
+          {% endif %}
