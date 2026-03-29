@@ -28,6 +28,8 @@ volumes/
 !/services/home-assistant/config/templates/
 /services/home-assistant/matter-server/
 /services/immich/database/
+/services/linguacafe/database/
+/services/linguacafe/storage/
 
 # Gateway — sensitive runtime files only (most config IS git-tracked)
 /infrastructure/gateway/config/acme.json

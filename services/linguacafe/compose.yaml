@@ -1,0 +1,66 @@
+name: linguacafe
+
+services:
+  webserver:
+    image: ghcr.io/simjanos-dev/linguacafe-webserver:v0.14.1
+    container_name: linguacafe-webserver
+    restart: unless-stopped
+    networks:
+      - traefik_internal
+      - default
+    env_file:
+      - ../../global.env
+      - vars.env
+      - .env
+    volumes:
+      - ./storage:/var/www/html/storage
+    depends_on:
+      mysql:
+        condition: service_healthy
+    labels:
+      - "traefik.enable=true"
+      - "traefik.docker.network=traefik_internal"
+      - "traefik.http.routers.linguacafe-internal.entrypoints=websecure"
+      - "traefik.http.routers.linguacafe-internal.rule=Host(`linguacafe.internal.pippinn.me`)"
+
+  python:
+    image: ghcr.io/simjanos-dev/linguacafe-python-service:v0.14.1
+    container_name: linguacafe-python-service
+    command: "python3 /app/tokenizer.py"
+    restart: unless-stopped
+    tty: true
+    networks:
+      - default
+    environment:
+      PYTHONPATH: /var/www/html/storage/app/model
+    volumes:
+      - ./storage:/var/www/html/storage
+
+  mysql:
+    image: mysql:8.0-debian
+    container_name: linguacafe-database
+    restart: unless-stopped
+    tty: true
+    networks:
+      - default
+    env_file:
+      - vars.env
+      - .env
+    environment:
+      MYSQL_DATABASE: linguacafe
+      MYSQL_USER: linguacafe
+      MYSQL_PASSWORD: ${DB_PASSWORD}
+      MYSQL_ROOT_PASSWORD: ${DB_ROOT_PASSWORD}
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -h localhost -u root -p$$MYSQL_ROOT_PASSWORD"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    volumes:
+      - ./database:/var/lib/mysql
+    labels:
+      - "wud.watch=false"
+
+networks:
+  traefik_internal:
+    external: true
