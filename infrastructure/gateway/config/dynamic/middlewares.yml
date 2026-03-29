@@ -7,20 +7,7 @@ http:
           - "127.0.0.1/32"      # localhost/healthchecks
           - "172.24.0.0/24"     # traefik_internal to allow other containers to connect
 
-    crowdsec:
-      plugin:
-        bouncer:
-          enabled: true
-          crowdsecMode: stream # 'stream' is best for performance
-          crowdsecLapiHost: "crowdsec:8081"
-          crowdsecLapiKey: "REDACTED_LAPI_KEY"
-          
-          # Optional: What to do if CrowdSec is down (true = allow traffic)
-          updateIntervalSeconds: 300
-          defaultDecision: allow
-          # APPSEC SETTINGS:
-          crowdsecAppsecEnabled: true
-          crowdsecAppsecHost: "crowdsec:7422"
+    # crowdsec middleware is defined in crowdsec.yml (gitignored — contains LAPI key)
 
     my-rate-limit:
       rateLimit:

@@ -1,5 +1,17 @@
 # Architecture Specifications
 
+## 🖥️ Hosts
+
+| Host | Role | LAN IP | Repo path |
+|------|------|--------|-----------|
+| OMV NAS | Primary host — all production services, Traefik, Cloudflare Tunnel | `192.168.86.17` | `services/`, `infrastructure/` |
+| Raspberry Pi | Secondary host — backup DNS, sync, monitoring | `192.168.86.26` | `pi/` |
+
+**NAS PiHole** (primary DNS): macvlan IP `192.168.86.27`
+**Pi PiHole** (backup DNS): direct port on Pi LAN IP `192.168.86.26`
+
+---
+
 ## 🔑 Environment Strategy
 Each service folder must contain:
 1. `compose.yaml`: The service definition.

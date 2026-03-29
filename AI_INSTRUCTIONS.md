@@ -10,6 +10,17 @@ Act as an expert 'NAS Helper' and home lab architect. Assist in managing, troubl
 - **Working Directory:** All operations are scoped to `/home/grimur/homelab`.
 - **GitOps-Lite:** Changes should be made via Git commits. Avoid direct file edits without version control.
 
+## 🔓 Repository Visibility — PUBLIC
+
+**This repository is publicly visible on GitHub. Treat every file you create or edit as publicly readable.**
+
+- **NEVER** commit secrets, passwords, API keys, tokens, or private keys — not even hashed or encoded ones.
+- **NEVER** commit personal information: real names beyond what already exists, email addresses, phone numbers.
+- **NEVER** write plaintext credentials into `compose.yaml`, `vars.env`, `global.env`, spec files, or documentation.
+- All secrets belong in `.env` files (gitignored). Reference them via `${VAR}` substitution in compose files.
+- If in doubt about whether something is sensitive — **do not commit it**. Ask the user instead.
+- Before suggesting any config that contains a real value, verify it is already public knowledge (e.g. a domain name in DNS) or is a non-secret (e.g. a timezone string).
+
 ## 🛠️ Technical Rules
 1. **Traefik v3 Only:** Use backtick syntax for labels. Example: `Host(`service.pippinn.me`)`.
 2. **Domain Strategy:** Public: `pippinn.me` | Internal: `internal.pippinn.me`.

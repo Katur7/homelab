@@ -1,0 +1,13 @@
+http:
+  middlewares:
+    crowdsec:
+      plugin:
+        bouncer:
+          enabled: true
+          crowdsecMode: stream
+          crowdsecLapiHost: "crowdsec:8081"
+          crowdsecLapiKey: "REPLACE_WITH_CROWDSEC_LAPI_KEY"
+          updateIntervalSeconds: 300
+          defaultDecision: allow
+          crowdsecAppsecEnabled: true
+          crowdsecAppsecHost: "crowdsec:7422"

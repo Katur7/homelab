@@ -36,6 +36,8 @@ volumes/
 /infrastructure/gateway/config/authelia/db.sqlite3
 /infrastructure/gateway/config/authelia/notification.txt
 /infrastructure/gateway/config/authelia/secrets/
+/infrastructure/gateway/config/authelia/users_database.yml
+/infrastructure/gateway/config/dynamic/crowdsec.yml
 /infrastructure/gateway/logs/
 
 # CrowdSec — hub-managed files (auto-downloaded at startup, not our config)
@@ -60,6 +62,10 @@ volumes/
 
 # WireGuard — server + peer private keys (auto-generated on first run)
 /infrastructure/wireguard/config/
+
+# Pi — service runtime data
+/pi/services/pihole/data/
+/pi/services/uptime-kuma/data/
 
 # IDE files
 .vscode/
