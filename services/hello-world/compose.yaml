@@ -1,0 +1,19 @@
+name: hello-world
+
+services:
+  hello:
+    image: crccheck/hello-world:v1.0.0
+    container_name: hello
+    restart: unless-stopped
+    networks:
+      - traefik_internal
+    expose:
+      - 8000
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.hello.entrypoints=tunnel"
+      - "traefik.http.routers.hello.rule=Host(`hello.pippinn.me`)"
+
+networks:
+  traefik_internal:
+    external: true
