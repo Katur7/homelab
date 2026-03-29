@@ -1,6 +1,6 @@
 # Milestone 06 Summary: Application Service Migrations
 
-**Date:** 2026-03-26
+**Date:** 2026-03-29
 **Status:** `COMPLETE`
 
 ---
@@ -23,6 +23,7 @@ Migrated all application stacks from OMV-managed `/appdata/` into the GitOps-con
 | 06.9 Home Assistant | homeassistant, matter-server, ord_dagsins | ✅ |
 | 06.10 Immich | immich-server, immich-ml, redis, postgres | ✅ |
 | 06.11 Hello World | `hello` | ✅ (discovered during final check) |
+| 06.12 Linguacafe | `linguacafe-webserver`, `linguacafe-python-service`, `linguacafe-database` | ✅ |
 
 ---
 
@@ -45,7 +46,14 @@ Switched Vikunja and Immich to semver tags (`vikunja:2.2.2`, `immich:v2.6.1`).
 
 **compose-level variable substitution:** `env_file` only injects vars into the container
 environment — not into compose file variable substitution. Values used in `image:`,
-`environment:`, or volume paths must be in `.env` or hardcoded.
+`environment:`, or volume paths must be in `.env` or hardcoded. Convention: secrets/tunables
+go in `.env` (referenced via `${VAR}`); static non-secret values are hardcoded directly in
+`compose.yaml`. Documented in `AI_INSTRUCTIONS.md` rule 6.
+
+**MySQL password migration:** When migrating an existing MySQL data directory, `MYSQL_PASSWORD`
+and `MYSQL_ROOT_PASSWORD` env vars are ignored on startup — they only apply on first init.
+Passwords must be rotated in-place via `ALTER USER ... IDENTIFIED BY` after starting the
+container with the old data.
 
 **HA config selective tracking:** Most of `services/home-assistant/config/` is gitignored,
 but `configuration.yaml`, `sensors/`, and `templates/` are selectively un-ignored as
@@ -60,6 +68,7 @@ user-authored files.
 | Vikunja | `VIKUNJA_DATABASE_PASSWORD`, `VIKUNJA_SERVICE_JWTSECRET`, `POSTGRES_PASSWORD` | `services/vikunja/.env` |
 | Audiobookshelf | `LISSEN_APP_SECRET` | `services/audiobookshelf/.env` |
 | Immich | `DB_PASSWORD`, `IMMICH_APP_AUTH_BYPASS_SECRET`, `IMMICH_VERSION` | `services/immich/.env` |
+| Linguacafe | `DB_PASSWORD`, `DB_ROOT_PASSWORD` | `services/linguacafe/.env` |
 
 ---
 
