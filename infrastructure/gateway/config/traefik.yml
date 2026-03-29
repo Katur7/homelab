@@ -9,7 +9,7 @@ log:
 
 # Accesslog
 accesslog:
-  format: common
+  format: json
   filePath: /var/log/traefik/access.log
   fields:
     names:
