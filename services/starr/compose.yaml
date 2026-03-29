@@ -39,6 +39,7 @@ services:
       - "traefik.http.routers.sonarr.entrypoints=websecure"
       - "traefik.http.routers.sonarr.rule=Host(`sonarr.internal.pippinn.me`)"
       - "traefik.docker.network=traefik_internal"
+      - "wud.tag.include=^\\d+\\.\\d+\\.\\d+\\.\\d+-ls\\d+$$"
 
   prowlarr:
     image: linuxserver/prowlarr:2.3.0.5236-ls139
@@ -79,6 +80,7 @@ services:
       - "traefik.http.routers.torrent.rule=Host(`torrent.internal.pippinn.me`)"
       - "traefik.http.services.torrent.loadbalancer.server.port=8080"
       - "traefik.docker.network=traefik_internal"
+      - "wud.tag.include=^\\d+\\.\\d+\\.\\d+-r\\d+-ls\\d+$$"
 
 networks:
   traefik_internal:

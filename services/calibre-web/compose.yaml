@@ -18,6 +18,7 @@ services:
       - "traefik.http.routers.calibre-web.entrypoints=websecure"
       - "traefik.http.routers.calibre-web.rule=Host(`ebooks.internal.pippinn.me`)"
       - "traefik.docker.network=traefik_internal"
+      - "wud.tag.include=^\\d+\\.\\d+\\.\\d+-ls\\d+$$"
 
 networks:
   traefik_internal:

@@ -19,14 +19,17 @@ services:
       # auto-discover the container IP on traefik_internal. host.docker.internal resolves
       # to 172.17.0.1 (docker bridge / host) via extra_hosts in the gateway compose.
       - "traefik.http.services.home-assistant.loadbalancer.server.url=http://host.docker.internal:8123"
+      - "wud.tag.include=^\\d{4}\\.\\d+\\.\\d+$$"
 
   matter-server:
-    image: ghcr.io/home-assistant-libs/python-matter-server:stable
+    image: ghcr.io/home-assistant-libs/python-matter-server:6.2.2
     container_name: matter-server
     restart: unless-stopped
     network_mode: host
     volumes:
       - ./matter-server:/data
+    labels:
+      - "wud.tag.include=^\\d+\\.\\d+\\.\\d+$$"
 
   ord_dagsins:
     image: katur/ord_dagsins
@@ -39,6 +42,7 @@ services:
       - "traefik.docker.network=traefik_internal"
       - "traefik.http.routers.ord-dagsins.entrypoints=websecure,tunnel"
       - "traefik.http.routers.ord-dagsins.rule=Host(`ord-dagsins.pippinn.me`)"
+      - "wud.watch=false"
 
 networks:
   traefik_internal:

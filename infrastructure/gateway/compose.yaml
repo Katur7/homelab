@@ -65,6 +65,8 @@ services:
     networks:
       - traefik_internal
     restart: unless-stopped
+    labels:
+      - "wud.tag.include=^v\\d+\\.\\d+\\.\\d+$$"
 
   # ── Redis ─────────────────────────────────────────────────────────────────────
   # Session store for Authelia
@@ -75,6 +77,8 @@ services:
     networks:
       - traefik_internal
     restart: unless-stopped
+    labels:
+      - "wud.tag.include=^[\\d.]+-alpine$$"
 
   # ── Authelia ──────────────────────────────────────────────────────────────────
   # SSO / OIDC provider for all protected services

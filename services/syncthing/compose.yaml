@@ -27,6 +27,7 @@ services:
       - "traefik.http.routers.sync-internal.entrypoints=websecure"
       - "traefik.http.routers.sync-internal.rule=Host(`sync.internal.pippinn.me`)"
       - "traefik.http.services.sync.loadbalancer.server.port=8384"
+      - "wud.tag.include=^v\\d+\\.\\d+\\.\\d+-ls\\d+$$"
 
 networks:
   traefik_internal:
