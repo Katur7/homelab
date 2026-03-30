@@ -74,5 +74,6 @@ None required.
 
 ## Post-Publish
 
-- Repo pushed to GitHub as **private** initially
-- Can be made public once GitHub remote is configured and verified
+- Repo published to GitHub as public on 2026-03-31
+- SSH key generated on NAS (`ed25519`), added to GitHub account
+- Remote configured as `git@github.com:...` (SSH)

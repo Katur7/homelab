@@ -1,7 +1,7 @@
 # Milestone 08 Plan: Raspberry Pi — Documentation, Hardening & Maintenance
 
 **Date:** 2026-03-29
-**Status:** `PLANNED`
+**Status:** `IN PROGRESS`
 
 ---
 
@@ -26,7 +26,15 @@ the OS, establishes auto-patching for OS packages, and adds Docker image update 
 
 ---
 
-### 08.1 — Pi Repo Structure & Service Documentation
+### 08.1 — Publish Repo ✅
+
+**Goal:** Audit and publish the homelab repo publicly on GitHub.
+
+**Status:** Complete — see commit `106f84f`.
+
+---
+
+### 08.2 — Pi Repo Structure & Service Documentation
 
 **Goal:** Bring the Pi into the repo as a documented, GitOps-managed host.
 
@@ -78,7 +86,7 @@ docker ps --format "table {{.Names}}\t{{.Image}}\t{{.Status}}"
 
 ---
 
-### 08.2 — OS Security Hardening
+### 08.3 — OS Security Hardening
 
 **Goal:** Harden the Pi OS to a reasonable baseline for a LAN-only host.
 
@@ -129,7 +137,7 @@ in `/etc/fail2ban/jail.local`.
 
 ---
 
-### 08.3 — OS Auto-Updates (unattended-upgrades)
+### 08.4 — OS Auto-Updates (unattended-upgrades)
 
 **Goal:** Security patches applied automatically. No surprise reboots.
 
@@ -175,7 +183,7 @@ sudo unattended-upgrade --dry-run --debug
 
 ---
 
-### 08.4 — Docker Auto-Update via Cron
+### 08.5 — Docker Auto-Update via Cron
 
 **Goal:** Keep Pi containers up to date automatically. No notifications needed — UptimeKuma
 monitors PiHole health, and the NAS PiHole is the primary DNS so a brief restart is safe.
@@ -213,11 +221,11 @@ and run `docker compose up -d` to re-deploy from the pinned image.
 
 | # | Sub-milestone | Key risk | Mitigation |
 |---|---------------|----------|------------|
-| 08.1 | Repo documentation | Mis-documenting live config | Verify against `docker inspect` / running compose |
-| 08.2 | SSH hardening | Lockout if key not confirmed first | Test key login before restarting sshd |
-| 08.2 | ufw | Blocking UDP 53 takes down LAN DNS | Add 53/udp rule explicitly before enabling ufw |
-| 08.3 | unattended-upgrades | Auto-reboot setting | Explicitly set `Automatic-Reboot "false"` |
-| 08.4 | WUD socket | Unnecessary write access | Mount docker.sock as `:ro` |
+| 08.2 | Repo documentation | Mis-documenting live config | Verify against `docker inspect` / running compose |
+| 08.3 | SSH hardening | Lockout if key not confirmed first | Test key login before restarting sshd |
+| 08.3 | ufw | Blocking UDP 53 takes down LAN DNS | Add 53/udp rule explicitly before enabling ufw |
+| 08.4 | unattended-upgrades | Auto-reboot setting | Explicitly set `Automatic-Reboot "false"` |
+| 08.5 | WUD socket | Unnecessary write access | Mount docker.sock as `:ro` |
 
 ---
 
@@ -232,10 +240,11 @@ instance on the NAS monitoring the Pi's services, or a dead-man's switch externa
 
 ## Execution Order
 
-1. **08.1** first — get the services documented before touching anything operational.
-2. **08.2** — harden while services are stable and known.
-3. **08.3** — add auto-patching once the baseline is confirmed clean.
-4. **08.4** — add WUD last (lowest priority, purely additive).
+1. **08.1** ✅ — repo published.
+2. **08.2** — get the services documented before touching anything operational.
+3. **08.3** — harden while services are stable and known.
+4. **08.4** — add auto-patching once the baseline is confirmed clean.
+5. **08.5** — add auto-updates last (lowest priority, purely additive).
 
 ---
 
