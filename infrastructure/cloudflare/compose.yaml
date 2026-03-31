@@ -29,7 +29,7 @@ services:
   # Keeps vpn.pippinn.me A record pointing to the current public IP
   # CLOUDFLARE_API_TOKEN env var overrides api_token field in config.json
   cloudflare-ddns:
-    image: timothyjmiller/cloudflare-ddns:2.0.8
+    image: timothyjmiller/cloudflare-ddns:2.1.0
     container_name: cloudflare-ddns
     networks:
       - traefik_tunnel

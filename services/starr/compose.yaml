@@ -2,7 +2,7 @@ name: starr
 
 services:
   radarr:
-    image: ghcr.io/linuxserver/radarr:6.0.4.10291-ls295
+    image: ghcr.io/linuxserver/radarr:6.0.4.10291-ls296
     container_name: radarr
     restart: unless-stopped
     networks:
@@ -59,7 +59,7 @@ services:
       - "wud.tag.include=^\\d+\\.\\d+\\.\\d+\\.\\d+-ls\\d+$$"
 
   qbittorrent:
-    image: ghcr.io/linuxserver/qbittorrent:5.1.4-r2-ls446
+    image: ghcr.io/linuxserver/qbittorrent:5.1.4-r2-ls447
     container_name: qbittorrent
     restart: unless-stopped
     networks:

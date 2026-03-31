@@ -2,7 +2,7 @@ name: home-assistant
 
 services:
   homeassistant:
-    image: ghcr.io/home-assistant/home-assistant:2026.3.2
+    image: ghcr.io/home-assistant/home-assistant:2026.3.4
     container_name: homeassistant
     restart: unless-stopped
     network_mode: host
@@ -22,7 +22,7 @@ services:
       - "wud.tag.include=^\\d{4}\\.\\d+\\.\\d+$$"
 
   matter-server:
-    image: ghcr.io/home-assistant-libs/python-matter-server:6.2.2
+    image: ghcr.io/home-assistant-libs/python-matter-server:8.1.0
     container_name: matter-server
     restart: unless-stopped
     network_mode: host
