@@ -5,10 +5,11 @@
 | Host | Role | LAN IP | Repo path |
 |------|------|--------|-----------|
 | OMV NAS | Primary host — all production services, Traefik, Cloudflare Tunnel | `192.168.86.17` | `services/`, `infrastructure/` |
-| Raspberry Pi | Secondary host — backup DNS, sync, monitoring | `192.168.86.26` | `pi/` |
+| Raspberry Pi | Secondary host — backup DNS, sync, monitoring, Immich ML | `192.168.86.26` | `pi/` |
 
 **NAS PiHole** (primary DNS): macvlan IP `192.168.86.27`
 **Pi PiHole** (backup DNS): direct port on Pi LAN IP `192.168.86.26`
+**Immich ML** (remote inference): `http://192.168.86.26:3003` — NAS AMD E-350 is below x86-64-v2 baseline required since Immich v2.6
 
 ---
 
