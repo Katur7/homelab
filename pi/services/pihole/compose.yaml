@@ -14,6 +14,9 @@ services:
       - ../../global.env
       - vars.env
       - .env
+    environment:
+      PIHOLE_UID: 1000
+      PIHOLE_GID: 1000
     volumes:
       - ./data:/etc/pihole
       - type: tmpfs
@@ -44,7 +47,9 @@ services:
       - SYNC_CONFIG_DNS=true
       # Exclude the "system" level DNS settings that Docker usually hardcodes
       - SYNC_CONFIG_DNS_EXCLUDE=upstreams,listeningMode,reply.host.IPv4,reply.host.force4
-      - SYNC_CONFIG_MISC=true
+      # Disabled — Pi has FTLCONF_misc_privacylevel=3 locked via env var (SD card protection).
+      # Nebula-sync cannot overwrite env-locked settings and returns 400 if it tries.
+      - SYNC_CONFIG_MISC=false
       - RUN_GRAVITY=false
       - CRON=*/5 * * * *
     depends_on:

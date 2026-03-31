@@ -28,7 +28,30 @@ Docker image updates are handled by a weekly cron job (`pi/scripts/update-contai
 
 Services are accessed directly by port on the LAN IP. No reverse proxy on this host.
 
-## Deployment
+## Initial Setup (migrating from /appdata)
+
+```bash
+# 1. Clone the repo
+git clone git@github.com:Katur7/homelab.git ~/homelab
+
+# 2. Create the secrets file
+cp ~/homelab/pi/services/pihole/.env.example ~/homelab/pi/services/pihole/.env
+# Edit .env and fill in PIHOLE_PASSWORD
+
+# 3. Stop and remove the old stacks
+cd /appdata/pihole && docker compose down
+cd /appdata/uptime-kuma && docker compose down
+
+# 4. Migrate data
+mv /appdata/pihole/pihole ~/homelab/pi/services/pihole/data
+mv /appdata/uptime-kuma/uptime-kuma ~/homelab/pi/services/uptime-kuma/data
+
+# 5. Start from the repo
+cd ~/homelab/pi/services/pihole && docker compose up -d
+cd ~/homelab/pi/services/uptime-kuma && docker compose up -d
+```
+
+## Deployment (day-to-day)
 
 ```bash
 # PiHole + Nebula-Sync

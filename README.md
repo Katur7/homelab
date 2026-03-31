@@ -8,6 +8,7 @@ compatibility and version control.
 ## 📁 Repository Structure
 - `/infrastructure/`: Core services (Traefik v3, Cloudflare Tunnel, Authelia).
 - `/services/`: Application stacks (Immich, HomeAssistant, etc.).
+- `/pi/`: Raspberry Pi host — backup DNS, sync, and uptime monitoring.
 - `global.env`: System-wide variables (Domains, PUID/PGID).
 - `ARCHITECTURE.md`: Technical details on networking and volume strategy.
 - `AI_INSTRUCTIONS.md`: Critical rules for AI agents modifying this repo.
