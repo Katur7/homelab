@@ -1,0 +1,19 @@
+name: immich-ml
+
+services:
+  immich-machine-learning:
+    image: ghcr.io/immich-app/immich-machine-learning:v2.6.1
+    container_name: immich_machine_learning
+    restart: unless-stopped
+    ports:
+      - "3003:3003"
+    volumes:
+      - model-cache:/cache
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+volumes:
+  model-cache:
