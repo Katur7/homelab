@@ -39,7 +39,16 @@ None.
 
 None.
 
+## WUD sonarr bug — root cause and fix (2026-03-31)
+
+**Root cause:** GHCR returns tags in lexicographic (alphabetical) order. WUD picks the alphabetically-last matching tag as "latest". For 4-part linuxserver tags (`A.B.C.D-lsNNN`), this is wrong: `4.0.9.2244-ls257` sorts after `4.0.17.2952-ls305` because `9 > 1` character-by-character. WUD therefore reported `4.0.9.2244-ls257` as the newest available version — a false downgrade.
+
+**Fix:** Added `wud.tag.transform=^(\\d+\\.\\d+\\.\\d+)\\.\\d+(-ls\\d+)$$ => $$1$$2` to radarr, sonarr, and prowlarr in `services/starr/compose.yaml`. This strips the 4th version component before comparison, giving WUD valid 3-part semver (`4.0.17-ls305` vs `4.0.9-ls257`) that it compares numerically. Sonarr now correctly shows `updateAvailable: false`.
+
+**Applied proactively to:** radarr and prowlarr — both use the same 4-part format and will hit the same bug on their next double-digit patch release (e.g. radarr `6.0.9` → `6.0.10`).
+
+**Latent risk — qbittorrent:** Uses 3-part `A.B.C-rN-lsNNN` format (valid semver), so WUD may compare correctly for now. However the same alphabetic ordering bug will occur if any version component reaches double digits (e.g. `5.1.9` → `5.1.10`). The same transform cannot be applied (no 4th component to strip). Fix at that point: strip `-r\d+-ls\d+` for comparison, accepting loss of ls-only update detection, or investigate a padding-based transform.
+
 ## Known issues / follow-up
 
-- **sonarr WUD bug:** WUD consistently reports `4.0.17.2952-ls305 → 4.0.9.2244-ls257` (a downgrade). Needs investigation — likely a WUD semver parsing issue with the 4-part linuxserver tag format.
 - **`AskUserQuestion` confirmed working** for button-based update gate.
