@@ -24,6 +24,14 @@ services:
     network_mode: host
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock:ro
+      - ./beszel_agent_data:/var/lib/beszel-agent
+      # monitor other disks / partitions by mounting a folder in /extra-filesystems
+      # - /mnt/disk/.beszel:/extra-filesystems/sda1:ro
+    environment:
+      LISTEN: 45876
+      KEY: ${BESZEL_AGENT_KEY_PI}
+      TOKEN: ${BESZEL_AGENT_TOKEN_PI}
+      HUB_URL: https://monitoring.internal.pippinn.me
     environment:
       LISTEN: 0.0.0.0:45876
       KEY: ${BESZEL_AGENT_KEY_PI}
