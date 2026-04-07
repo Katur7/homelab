@@ -15,4 +15,4 @@ services:
       LISTEN: 45876
       KEY: ${BESZEL_AGENT_KEY_NAS}
       TOKEN: ${BESZEL_AGENT_TOKEN_NAS}
-      HUB_URL: https://monitoring.internal.pippinn.me
+      HUB_URL: http://192.168.86.26:8090

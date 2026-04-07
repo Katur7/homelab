@@ -31,7 +31,7 @@ services:
       LISTEN: 45876
       KEY: ${BESZEL_AGENT_KEY_PI}
       TOKEN: ${BESZEL_AGENT_TOKEN_PI}
-      HUB_URL: https://monitoring.internal.pippinn.me
+      HUB_URL: http://localhost:8090
     logging:
       driver: "json-file"
       options:
