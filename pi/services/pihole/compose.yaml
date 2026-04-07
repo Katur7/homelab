@@ -52,6 +52,7 @@ services:
       - SYNC_CONFIG_MISC=false
       - RUN_GRAVITY=false
       - CRON=*/5 * * * *
+      - WEBHOOK_SYNC_SUCCESS_URL=${UPTIME_PUSH_URL}
     depends_on:
       - pihole
     logging:
