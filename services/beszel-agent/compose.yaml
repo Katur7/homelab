@@ -2,7 +2,7 @@ name: beszel-agent
 
 services:
   beszel-agent:
-    image: ghcr.io/henrygd/beszel-agent:0.18.6
+    image: henrygd/beszel-agent
     container_name: beszel-agent
     restart: unless-stopped
     network_mode: host
