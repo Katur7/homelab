@@ -66,6 +66,11 @@ volumes/
 # Pi — service runtime data
 /pi/services/pihole/data/
 /pi/services/uptime-kuma/data/
+/pi/services/beszel/data/
+/pi/services/beszel/beszel_agent_data/
+
+# Beszel agent — runtime data
+/services/beszel-agent/beszel_agent_data/
 
 # IDE files
 .vscode/

@@ -10,6 +10,7 @@
 **NAS PiHole** (primary DNS): macvlan IP `192.168.86.27`
 **Pi PiHole** (backup DNS): direct port on Pi LAN IP `192.168.86.26`
 **Immich ML** (remote inference): `http://192.168.86.26:3003` — NAS AMD E-350 is below x86-64-v2 baseline required since Immich v2.6
+**Beszel Hub** (system monitoring): `http://192.168.86.26:8090` — exposed via Traefik at `monitoring.internal.pippinn.me`; agent on Pi (port 45876) and NAS (port 45876, LAN-only)
 
 ---
 
