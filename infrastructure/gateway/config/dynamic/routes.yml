@@ -15,6 +15,11 @@ http:
         - websecure
       rule: "Host (`pihole-on-pi.internal.pippinn.me`)"
       service: pihole-on-pi
+    monitoring:
+      entryPoints:
+        - websecure
+      rule: "Host (`monitoring.internal.pippinn.me`)"
+      service: monitoring
 
   services:
     omv:
@@ -31,4 +36,9 @@ http:
       loadBalancer:
         servers:
           - url: "http://192.168.86.26"
+        passHostHeader: true
+    monitoring:
+      loadBalancer:
+        servers:
+          - url: "http://192.168.86.26:8090"
         passHostHeader: true
