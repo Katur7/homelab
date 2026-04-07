@@ -16,6 +16,3 @@ services:
       KEY: ${BESZEL_AGENT_KEY_NAS}
       TOKEN: ${BESZEL_AGENT_TOKEN_NAS}
       HUB_URL: https://monitoring.internal.pippinn.me
-    environment:
-      LISTEN: 0.0.0.0:45876
-      KEY: ${BESZEL_AGENT_KEY_PI}
