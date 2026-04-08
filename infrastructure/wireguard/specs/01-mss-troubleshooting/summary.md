@@ -1,4 +1,4 @@
-# 07.7 WireGuard TCP MSS Clamping
+# 01 WireGuard MSS Clamping & GRO Fix
 
 **Status:** COMPLETE (2026-04-08)
 
