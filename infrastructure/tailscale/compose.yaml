@@ -7,7 +7,7 @@ networks:
 
 services:
   tailscale:
-    image: tailscale/tailscale:v1.94.2
+    image: tailscale/tailscale:v1.96.5
     container_name: tailscale
     hostname: pippinn
     env_file:
