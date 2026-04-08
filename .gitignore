@@ -60,8 +60,13 @@ volumes/
 # Tailscale — binary runtime state
 /infrastructure/tailscale/state/
 
-# WireGuard — server + peer private keys (auto-generated on first run)
-/infrastructure/wireguard/config/
+# WireGuard — private keys and peer configs (auto-generated on first run)
+# templates/ is tracked (no secrets — uses $(cat ...) shell substitutions)
+/infrastructure/wireguard/config/.donoteditthisfile
+/infrastructure/wireguard/config/server/
+/infrastructure/wireguard/config/peer_*/
+/infrastructure/wireguard/config/wg_confs/
+/infrastructure/wireguard/config/coredns/
 
 # Pi — service runtime data
 /pi/services/pihole/data/

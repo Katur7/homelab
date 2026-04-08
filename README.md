@@ -6,7 +6,7 @@ It is managed by the user `grimur` (UID 1000) to ensure IDE
 compatibility and version control.
 
 ## 📁 Repository Structure
-- `/infrastructure/`: Core services (Traefik v3, Cloudflare Tunnel, Authelia).
+- `/infrastructure/`: Core services (Traefik v3, Cloudflare Tunnel, Authelia, Wireguard, Tailscale).
 - `/services/`: Application stacks (Immich, HomeAssistant, etc.).
 - `/pi/`: Raspberry Pi host — backup DNS, sync, and uptime monitoring.
 - `global.env`: System-wide variables (Domains, PUID/PGID).
