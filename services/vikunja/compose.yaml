@@ -2,7 +2,7 @@ name: vikunja
 
 services:
   vikunja:
-    image: vikunja/vikunja:2.2.2
+    image: vikunja/vikunja:2.3.0
     container_name: vikunja
     user: 1000:100
     restart: unless-stopped
