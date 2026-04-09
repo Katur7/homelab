@@ -2,7 +2,7 @@ name: plex
 
 services:
   plex:
-    image: ghcr.io/linuxserver/plex:1.43.0.10492-121068a07-ls297
+    image: ghcr.io/linuxserver/plex:1.43.1.10576-06378bdcd-ls300
     container_name: plex
     restart: unless-stopped
     networks:
