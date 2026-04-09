@@ -24,7 +24,7 @@ services:
       - "wud.tag.transform=^(\\d+\\.\\d+\\.\\d+)\\.\\d+(-ls\\d+)$$ => $$1$$2"
 
   sonarr:
-    image: ghcr.io/linuxserver/sonarr:4.0.17.2952-ls305
+    image: ghcr.io/linuxserver/sonarr:4.0.17.2952-ls306
     container_name: sonarr
     restart: unless-stopped
     networks:
