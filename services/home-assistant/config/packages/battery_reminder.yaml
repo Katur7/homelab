@@ -1,0 +1,162 @@
+# Battery Reminder
+# Monitors all ZHA battery sensors and sends push notifications when any device
+# drops at or below the configured threshold. Phone battery sensors are excluded
+# via group.battery_monitor_exclusions. Quiet hours: 23:00–08:05.
+
+input_number:
+  battery_low_threshold:
+    name: "Battery Low Threshold (%)"
+    min: 5
+    max: 50
+    step: 5
+    initial: 20
+    unit_of_measurement: "%"
+    icon: mdi:battery-alert
+
+group:
+  battery_monitor_exclusions:
+    name: "Battery Monitor Exclusions"
+    entities:
+      - sensor.pixel_7_battery_level
+      - sensor.pixel_7a_battery_level
+
+template:
+  - sensor:
+      - name: "Devices with Low Battery"
+        unique_id: battery_low_device_count
+        state: >
+          {% set threshold = states('input_number.battery_low_threshold') | float(20) %}
+          {% set excluded = state_attr('group.battery_monitor_exclusions', 'entity_id') | default([]) %}
+          {% set ns = namespace(count=0) %}
+          {% for s in states.sensor
+              | selectattr('attributes.device_class', 'eq', 'battery')
+              | selectattr('state', 'is_number') %}
+            {% if s.state | float <= threshold and s.entity_id not in excluded %}
+              {% set ns.count = ns.count + 1 %}
+            {% endif %}
+          {% endfor %}
+          {{ ns.count }}
+        attributes:
+          devices: >
+            {# Both devices and levels use the same zero-pad sort so their indices stay in sync #}
+            {% set threshold = states('input_number.battery_low_threshold') | float(20) %}
+            {% set excluded = state_attr('group.battery_monitor_exclusions', 'entity_id') | default([]) %}
+            {% set ns = namespace(keyed=[]) %}
+            {% for s in states.sensor
+                | selectattr('attributes.device_class', 'eq', 'battery')
+                | selectattr('state', 'is_number') %}
+              {% if s.state | float <= threshold and s.entity_id not in excluded %}
+                {% set ns.keyed = ns.keyed + ["%03d" | format(s.state | int) ~ "||" ~ s.name] %}
+              {% endif %}
+            {% endfor %}
+            {% set ns2 = namespace(items=[]) %}
+            {% for entry in ns.keyed | sort %}
+              {% set ns2.items = ns2.items + [entry.split("||")[1]] %}
+            {% endfor %}
+            {{ ns2.items }}
+          levels: >
+            {% set threshold = states('input_number.battery_low_threshold') | float(20) %}
+            {% set excluded = state_attr('group.battery_monitor_exclusions', 'entity_id') | default([]) %}
+            {% set ns = namespace(keyed=[]) %}
+            {% for s in states.sensor
+                | selectattr('attributes.device_class', 'eq', 'battery')
+                | selectattr('state', 'is_number') %}
+              {% if s.state | float <= threshold and s.entity_id not in excluded %}
+                {% set ns.keyed = ns.keyed + ["%03d" | format(s.state | int)] %}
+              {% endif %}
+            {% endfor %}
+            {{ ns.keyed | sort | map('int') | list }}
+        unit_of_measurement: "devices"
+        icon: >
+          {% set threshold = states('input_number.battery_low_threshold') | float(20) %}
+          {% set excluded = state_attr('group.battery_monitor_exclusions', 'entity_id') | default([]) %}
+          {% set ns = namespace(found=false) %}
+          {% for s in states.sensor
+              | selectattr('attributes.device_class', 'eq', 'battery')
+              | selectattr('state', 'is_number') %}
+            {% if s.state | float <= threshold and s.entity_id not in excluded %}{% set ns.found = true %}{% endif %}
+          {% endfor %}
+          {{ 'mdi:battery-alert' if ns.found else 'mdi:battery-check' }}
+
+script:
+  battery_send_notification:
+    alias: "Battery: Send Notification"
+    fields:
+      device_list:
+        description: "List of formatted strings: '<Name> (<level>%)'"
+        selector:
+          object:
+    sequence:
+      - service: notify.grimur_mobile_phones
+        data:
+          title: "Low Battery"
+          message: >
+            {{ device_list | join('\n') }}
+
+automation:
+  - alias: "Battery: Alert on Level Drop"
+    id: battery_low_on_change
+    trigger:
+      - platform: event
+        event_type: state_changed
+    condition:
+      - condition: template
+        value_template: >
+          {{ trigger.event.data.get('new_state') is not none
+             and trigger.event.data.new_state.attributes.get('device_class') == 'battery'
+             and trigger.event.data.new_state.state not in ['unavailable', 'unknown']
+             and trigger.event.data.new_state.state | float(-1)
+                <= states('input_number.battery_low_threshold') | float(20)
+             and (trigger.event.data.old_state is none
+                  or trigger.event.data.old_state.state | float(100)
+                     > states('input_number.battery_low_threshold') | float(20))
+             and trigger.event.data.new_state.entity_id
+                not in (state_attr('group.battery_monitor_exclusions', 'entity_id') | default([])) }}
+      - condition: time
+        after: "08:05:00"
+        before: "23:00:00"
+    action:
+      - service: script.battery_send_notification
+        data:
+          device_list:
+            - "{{ trigger.event.data.new_state.name }} ({{ trigger.event.data.new_state.state | int }}%)"
+
+  - alias: "Battery: Daily Morning Check"
+    id: battery_daily_check
+    trigger:
+      - platform: time
+        at: "08:05:00"
+    condition:
+      - condition: template
+        value_template: >
+          {% set threshold = states('input_number.battery_low_threshold') | float(20) %}
+          {% set excluded = state_attr('group.battery_monitor_exclusions', 'entity_id') | default([]) %}
+          {% set ns = namespace(found=false) %}
+          {% for s in states.sensor
+              | selectattr('attributes.device_class', 'eq', 'battery')
+              | selectattr('state', 'is_number') %}
+            {% if s.state | float <= threshold and s.entity_id not in excluded %}
+              {% set ns.found = true %}
+            {% endif %}
+          {% endfor %}
+          {{ ns.found }}
+    action:
+      - service: script.battery_send_notification
+        data:
+          device_list: >
+            {% set threshold = states('input_number.battery_low_threshold') | float(20) %}
+            {% set excluded = state_attr('group.battery_monitor_exclusions', 'entity_id') | default([]) %}
+            {% set ns = namespace(keyed=[]) %}
+            {% for s in states.sensor
+                | selectattr('attributes.device_class', 'eq', 'battery')
+                | selectattr('state', 'is_number') %}
+              {% if s.state | float <= threshold and s.entity_id not in excluded %}
+                {# Zero-pad level so alphabetic sort == numeric sort (e.g. "009" < "080") #}
+                {% set ns.keyed = ns.keyed + ["%03d" | format(s.state | int) ~ "||" ~ s.name ~ " (" ~ s.state | int ~ "%)"] %}
+              {% endif %}
+            {% endfor %}
+            {% set ns2 = namespace(items=[]) %}
+            {% for entry in ns.keyed | sort %}
+              {% set ns2.items = ns2.items + [entry.split("||")[1]] %}
+            {% endfor %}
+            {{ ns2.items }}
