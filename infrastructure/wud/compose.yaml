@@ -1,11 +1,12 @@
-# What's Up Docker (WUD)
-# Monitors container images for available updates via socket-proxy
+# What's Up Docker (WUD) + auto-updater listener
 
 networks:
   traefik_internal:
     external: true
   socket_proxy:
     external: true
+  wud_internal:
+    name: wud_internal
 
 services:
   whatsupdocker:
@@ -18,9 +19,32 @@ services:
     networks:
       - traefik_internal
       - socket_proxy
+      - wud_internal
     labels:
+      - "wud.autoupdate=true"
       - "traefik.enable=true"
       - "traefik.http.routers.wud.entrypoints=websecure"
       - "traefik.http.routers.wud.rule=Host(`update.internal.pippinn.me`)"
       - "traefik.docker.network=traefik_internal"
+    restart: unless-stopped
+
+  autoupdater:
+    build: .
+    image: autoupdater:local
+    container_name: autoupdater
+    user: "1000:992"
+    env_file:
+      - .env
+    environment:
+      REPO_PATH: /home/grimur/homelab
+      GIT_USER_NAME: wud-autoupdater
+      GIT_USER_EMAIL: wud-autoupdater@pippinn.me
+      HOME: /tmp
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - /home/grimur/homelab:/home/grimur/homelab:rw
+    networks:
+      - wud_internal
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     restart: unless-stopped

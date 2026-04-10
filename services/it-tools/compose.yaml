@@ -8,6 +8,7 @@ services:
     networks:
       - traefik_internal
     labels:
+      - "wud.autoupdate=true"
       - "wud.tag.include=^\\d{4}\\.\\d{2}\\.\\d{2}-[a-f0-9]{7}$$"
       - "traefik.enable=true"
       - "traefik.http.routers.tools-internal.entrypoints=websecure"

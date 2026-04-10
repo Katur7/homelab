@@ -14,6 +14,7 @@ services:
       - ./config:/config
       - /srv/dev-disk-by-uuid-f1209e02-5b26-491f-ac40-f951e9ddfbb0/books/ebooks:/ebooks:ro
     labels:
+      - "wud.autoupdate=true"
       - "traefik.enable=true"
       - "traefik.http.routers.calibre-web.entrypoints=websecure"
       - "traefik.http.routers.calibre-web.rule=Host(`ebooks.internal.pippinn.me`)"

@@ -19,6 +19,7 @@ services:
     healthcheck:
       interval: 10m
     labels:
+      - "wud.autoupdate=true"
       - "traefik.enable=true"
       - "traefik.http.routers.mealie.entrypoints=websecure"
       - "traefik.http.routers.mealie.rule=Host(`mealie.internal.pippinn.me`)"

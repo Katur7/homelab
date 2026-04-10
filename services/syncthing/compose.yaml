@@ -23,6 +23,7 @@ services:
       - /srv/dev-disk-by-uuid-f1209e02-5b26-491f-ac40-f951e9ddfbb0/movies:/movies
       - /srv/dev-disk-by-uuid-220b73c9-2682-4822-b871-cb499733b15b/tv:/tv
     labels:
+      - "wud.autoupdate=true"
       - "traefik.enable=true"
       - "traefik.http.routers.sync-internal.entrypoints=websecure"
       - "traefik.http.routers.sync-internal.rule=Host(`sync.internal.pippinn.me`)"
