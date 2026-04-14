@@ -34,6 +34,7 @@ services:
     container_name: autoupdater
     user: "1000:992"
     env_file:
+      - ../../global.env
       - .env
     environment:
       REPO_PATH: /home/grimur/homelab

@@ -5,10 +5,12 @@ Receives WUD webhook POSTs, applies container updates, commits on success.
 Safe list: containers must have label wud.autoupdate=true to be eligible.
 """
 
+import datetime
 import json
 import logging
 import os
 import subprocess
+import threading
 import time
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from urllib.request import Request, urlopen
@@ -63,6 +65,18 @@ def container_image_id(container_name: str) -> str:
         text=True,
     )
     return result.stdout.strip()
+
+
+def container_full_image(container_name: str) -> str:
+    """Return fully-qualified image reference (registry/name:tag) from running container."""
+    result = subprocess.run(
+        ["docker", "inspect", container_name, "--format", "{{.Config.Image}}"],
+        capture_output=True,
+        text=True,
+    )
+    ref = result.stdout.strip()
+    # Strip existing tag — caller will append new_tag
+    return ref.rsplit(":", 1)[0] if ":" in ref else ref
 
 
 def update_compose_tag(compose_path: str, old_tag: str, new_tag: str) -> bool:
@@ -131,6 +145,15 @@ def wait_for_healthy(container_name: str, timeout: int = 30) -> bool:
     return False
 
 
+def _send_notification(payload: bytes) -> None:
+    try:
+        req = Request(HA_WEBHOOK_URL, data=payload, headers={"Content-Type": "application/json"})
+        urlopen(req, timeout=5)
+        log.info("Failure notification sent to HA")
+    except Exception as exc:
+        log.error("Failed to notify HA: %s", exc)
+
+
 def notify_failure(service: str, old_tag: str, new_tag: str, reason: str) -> None:
     if not HA_WEBHOOK_URL:
         log.warning("HA_WEBHOOK_URL not set — skipping failure notification")
@@ -138,12 +161,19 @@ def notify_failure(service: str, old_tag: str, new_tag: str, reason: str) -> Non
     payload = json.dumps(
         {"service": service, "old_tag": old_tag, "new_tag": new_tag, "reason": reason}
     ).encode()
-    try:
-        req = Request(HA_WEBHOOK_URL, data=payload, headers={"Content-Type": "application/json"})
-        urlopen(req, timeout=5)
-        log.info("Failure notification sent to HA")
-    except Exception as exc:
-        log.error("Failed to notify HA: %s", exc)
+    hour = time.localtime().tm_hour
+    if hour >= 22 or hour < 9:
+        now = datetime.datetime.now()
+        target = now.replace(hour=9, minute=0, second=0, microsecond=0)
+        if now >= target:
+            target += datetime.timedelta(days=1)
+        delay = (target - now).total_seconds()
+        log.info("Quiet hours — notification deferred by %ds (until 09:00)", int(delay))
+        t = threading.Timer(delay, _send_notification, args=[payload])
+        t.daemon = True
+        t.start()
+    else:
+        _send_notification(payload)
 
 
 def git_commit(compose_path: str, service: str, old_tag: str, new_tag: str) -> None:
@@ -200,10 +230,11 @@ def handle_update(payload: dict) -> None:
     old_image_id = container_image_id(container_name)
     log.info("Current image digest: %s", old_image_id)
 
-    # Pull new image
-    log.info("Pulling %s:%s", image_name, new_tag)
+    # Get fully-qualified image name from running container (WUD payload strips registry)
+    image_ref = container_full_image(container_name)
+    log.info("Pulling %s:%s", image_ref, new_tag)
     pull = subprocess.run(
-        ["docker", "pull", f"{image_name}:{new_tag}"], capture_output=True, text=True
+        ["docker", "pull", f"{image_ref}:{new_tag}"], capture_output=True, text=True
     )
     if pull.returncode != 0:
         log.error("Pull failed: %s", pull.stderr.strip())
@@ -237,7 +268,7 @@ def handle_update(payload: dict) -> None:
     if not wait_for_healthy(container_name):
         log.error("Health check failed — rolling back %s to %s", service, old_tag)
         revert_compose_tag(compose_path, new_tag, old_tag)
-        subprocess.run(["docker", "tag", old_image_id, f"{image_name}:{old_tag}"])
+        subprocess.run(["docker", "tag", old_image_id, f"{image_ref}:{old_tag}"])
         subprocess.run(["docker", "compose", "-f", compose_path, "up", "-d", "--no-pull", service])
         notify_failure(service, old_tag, new_tag, "Health check failed — rolled back")
         return
