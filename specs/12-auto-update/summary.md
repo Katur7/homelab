@@ -9,12 +9,13 @@ Update flow per container:
 1. Check `wud.autoupdate=true` Docker label via `docker inspect` — skip if absent
 2. Parse semver major from `image_tag_value` and `update_kind_remote_value` — skip if major bump
 3. Record current image digest
-4. `docker pull {image}:{new_tag}`
-5. Edit compose.yaml tag in-place
-6. `docker compose -f {compose_path} up -d {service}`
-7. Poll 30s for `running`/`healthy`
-8. Success → `git commit "Auto-update {service}: {old} → {new}"`
-9. Failure → revert compose.yaml + `docker compose up -d --no-pull` + POST to HA webhook
+4. Resolve fully-qualified image ref from `docker inspect {{.Config.Image}}` (WUD payload strips registry)
+5. `docker pull {full_image_ref}:{new_tag}`
+6. Edit compose.yaml tag in-place
+7. `docker compose -f {compose_path} up -d {service}`
+8. Poll 30s for `running`/`healthy`
+9. Success → `git commit "Auto-update {service}: {old} → {new}"`
+10. Failure → revert compose.yaml + `docker compose up -d --no-pull` + POST to HA webhook (deferred if quiet hours)
 
 ### Modified: `infrastructure/wud/compose.yaml`
 - Added `autoupdater` service (Python listener, `user: 1000:992` — runs as grimur/docker)
@@ -22,6 +23,7 @@ Update flow per container:
 - Mounts `/home/grimur/homelab` at same host path (required for correct compose volume resolution)
 - Mounts `/var/run/docker.sock` directly (write access needed for pull/recreate)
 - `extra_hosts: host.docker.internal:host-gateway` for HA webhook POST
+- `env_file: ../../global.env` for `TZ=Europe/Stockholm` (quiet hours use local time)
 
 ### Modified: `infrastructure/wud/vars.env`
 Added WUD HTTP trigger config:
@@ -49,6 +51,14 @@ Excluded: infrastructure (Traefik, Authelia, CrowdSec, Cloudflare), databases (P
 
 Webhook automation created in HA UI (webhook ID is the secret — not in repo).
 Notification template uses `trigger.json.service`, `trigger.json.reason`, `trigger.json.old_tag`, `trigger.json.new_tag`.
+
+## Post-Launch Fixes
+
+### Registry-stripped image name (2026-04-14)
+WUD's webhook payload sends `image.name` without the registry prefix (e.g. `mealie-recipes/mealie` instead of `ghcr.io/mealie-recipes/mealie`). Using this directly caused `docker pull` to target Docker Hub and fail with `access denied`. Fixed by resolving the full image reference from `docker inspect {{.Config.Image}}` on the running container instead.
+
+### Quiet hours for failure notifications (2026-04-14)
+Failure notification fired at 01:00 during the first overnight cron run. Fixed with a deferred send: if `notify_failure` is called between 22:00–09:00 CEST, a background `threading.Timer` defers the HA webhook POST until 09:00. Requires correct `TZ` in container (supplied via `global.env`).
 
 ## Deviations from Plan
 
