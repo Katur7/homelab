@@ -19,6 +19,36 @@ Provide proactive battery replacement reminders for ZHA/Zigbee devices before th
 - **Zero-pad sort** — `"%03d" | format(level)` used as sort key so 9% sorts before 10%, not after 80%
 - **Quiet hours 23:00–08:05** — real-time alert suppressed overnight; daily 08:05 check acts as deferred delivery
 
+## Post-deployment fixes
+
+### Fix 1 — ZHA sleep/wake repeat notifications (2026-04-13)
+**Problem:** ZHA devices that go `unavailable` on sleep and wake up with a low battery value were re-triggering the real-time alert on every wake cycle. The original condition treated `old_state = unavailable` as `float(100)`, making every `unavailable → low` transition look like a fresh crossing from above threshold.
+
+**Fix:** Require `old_state` to be a real numeric value strictly above threshold. Any `old_state` that is `none`, `unavailable`, or `unknown` suppresses the alert. New devices that have never reported before are caught by the 08:05 daily check.
+
+**Condition change:**
+```yaml
+# Before
+and (trigger.event.data.old_state is none
+     or trigger.event.data.old_state.state | float(100)
+        > states('input_number.battery_low_threshold') | float(20))
+
+# After
+and trigger.event.data.old_state is not none
+and trigger.event.data.old_state.state not in ['unavailable', 'unknown']
+and trigger.event.data.old_state.state | float(-1)
+   > states('input_number.battery_low_threshold') | float(20)
+```
+
+---
+
+### Fix 2 — eInkFrame boot-artifact 0% readings (2026-04-14)
+**Problem:** The eInkFrame reports `0%` for ~3 minutes during each boot/wake cycle before stabilising on its real value. History confirmed the pattern: `unavailable → unknown → 0.0` (×3), then gradual climb to real charge level. The daily check at 08:05 would include the device if it happened to be mid-boot at that time, sending a false low-battery notification.
+
+**Fix:** Added a 10-minute persistence guard to the daily check — a device is only included if its low state has been stable for more than 600 seconds (`(now() - s.last_changed).total_seconds() > 600`). Boot artifacts (~3 min) are filtered; genuine dead batteries (hours) are not.
+
+---
+
 ## Tests passed
 - ✅ Test 1 — Helpers loaded correctly
 - ✅ Test 2 — Template sensor counts correctly

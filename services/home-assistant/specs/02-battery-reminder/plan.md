@@ -182,9 +182,10 @@ automation:
              and trigger.event.data.new_state.state not in ['unavailable', 'unknown']
              and trigger.event.data.new_state.state | float(-1)
                 <= states('input_number.battery_low_threshold') | float(20)
-             and (trigger.event.data.old_state is none
-                  or trigger.event.data.old_state.state | float(100)
-                     > states('input_number.battery_low_threshold') | float(20))
+             and trigger.event.data.old_state is not none
+             and trigger.event.data.old_state.state not in ['unavailable', 'unknown']
+             and trigger.event.data.old_state.state | float(-1)
+                > states('input_number.battery_low_threshold') | float(20)
              and trigger.event.data.new_state.entity_id
                 not in (state_attr('group.battery_monitor_exclusions', 'entity_id') | default([])) }}
       - condition: time
@@ -217,7 +218,8 @@ Runs at 08:05, just after the quiet-hours window ends. Catches devices already l
           {% for s in states.sensor
               | selectattr('attributes.device_class', 'eq', 'battery')
               | selectattr('state', 'is_number') %}
-            {% if s.state | float <= threshold and s.entity_id not in excluded %}
+            {% if s.state | float <= threshold and s.entity_id not in excluded
+                 and (now() - s.last_changed).total_seconds() > 600 %}
               {% set ns.found = true %}
             {% endif %}
           {% endfor %}
@@ -232,7 +234,8 @@ Runs at 08:05, just after the quiet-hours window ends. Catches devices already l
             {% for s in states.sensor
                 | selectattr('attributes.device_class', 'eq', 'battery')
                 | selectattr('state', 'is_number') %}
-              {% if s.state | float <= threshold and s.entity_id not in excluded %}
+              {% if s.state | float <= threshold and s.entity_id not in excluded
+                   and (now() - s.last_changed).total_seconds() > 600 %}
                 {# Zero-pad level so alphabetic sort == numeric sort (e.g. "009" < "080") #}
                 {% set ns.keyed = ns.keyed + ["%03d" | format(s.state | int) ~ "||" ~ s.name ~ " (" ~ s.state | int ~ "%)"] %}
               {% endif %}
@@ -295,11 +298,13 @@ content: >
 
 ## Key Design Decisions
 - **Step 0 first:** Running the discovery template before writing YAML confirms ZHA is reporting numeric values and reveals the exact entity IDs.
-- **`event: state_changed` trigger (Option A):** Automation 1 listens to all state changes and filters in the condition. Fully dynamic — no entity list to maintain, no reload needed. New ZHA devices are covered from their first state report. Automation 3 (daily reload) is not needed and has been removed.
+- **`event: state_changed` trigger (Option A):** Automation 1 listens to all state changes and filters in the condition. Fully dynamic — no entity list to maintain, no reload needed. Automation 3 (daily reload) is not needed and has been removed.
+- **`unavailable` old_state suppression:** ZHA eInk and low-power devices periodically go `unavailable` then report their battery level on wake. Without this guard, each sleep/wake cycle would re-trigger an alert even though the battery level never crossed the threshold. `old_state` must be a real numeric value above threshold to fire — if `old_state` is `none`, `unavailable`, or `unknown`, the alert is suppressed. New devices are caught by the 08:05 daily check instead.
 - **08:05 as daily check time:** 5 minutes after quiet hours end. Reduces (but does not fully eliminate) the chance of a double notification — a device crossing the threshold at the exact second the daily check fires would appear in both. Acceptable: the window is one second wide and the result is an extra notification, not a missed one.
 - **No per-device tracking helpers:** Threshold crossing suppresses duplicates naturally; battery replacement re-arms the device automatically.
 - **Consolidated daily / single-device real-time:** Daily check lists all low devices in one notification; real-time alert is specific so the user immediately knows which device to address.
 - **Quiet hours 23:00–08:05:** Real-time crossing alert is suppressed. The daily 08:05 check acts as the deferred delivery for any drops that occurred overnight.
+- **Daily check 10-minute persistence guard:** The daily check only includes a device if its low state has persisted for more than 10 minutes (`last_changed` age > 600s). This filters out boot-artifact 0% readings from devices (e.g. eInkFrame) that briefly report 0% during their ZHA wake cycle before stabilising. Real dead batteries will have been low for hours and pass the guard. The real-time automation is already protected by the `unknown` old-state suppression.
 - **Known gap — drop and recover during quiet hours:** If a device drops below threshold then recovers above it between 23:00–08:05 (e.g. a glitching Zigbee sensor that briefly reports a low value), no notification is ever sent. For real battery drain this is irrelevant. For flapping sensors it means a spurious low reading is silently dropped, which is actually desirable behaviour.
 - **ZHA numeric battery:** ZHA reports battery as a numeric percentage for all mainstream Zigbee devices. The `is_number` filter handles any edge-case device that does not.
 - **Float comparison throughout:** All numeric threshold comparisons use `| float` casts and `<=` (inclusive) so a device at exactly the threshold value is treated as low — consistent across real-time alert, daily check, template sensor, and card.

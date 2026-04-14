@@ -107,9 +107,10 @@ automation:
              and trigger.event.data.new_state.state not in ['unavailable', 'unknown']
              and trigger.event.data.new_state.state | float(-1)
                 <= states('input_number.battery_low_threshold') | float(20)
-             and (trigger.event.data.old_state is none
-                  or trigger.event.data.old_state.state | float(100)
-                     > states('input_number.battery_low_threshold') | float(20))
+             and trigger.event.data.old_state is not none
+             and trigger.event.data.old_state.state not in ['unavailable', 'unknown']
+             and trigger.event.data.old_state.state | float(-1)
+                > states('input_number.battery_low_threshold') | float(20)
              and trigger.event.data.new_state.entity_id
                 not in (state_attr('group.battery_monitor_exclusions', 'entity_id') | default([])) }}
       - condition: time
@@ -135,7 +136,8 @@ automation:
           {% for s in states.sensor
               | selectattr('attributes.device_class', 'eq', 'battery')
               | selectattr('state', 'is_number') %}
-            {% if s.state | float <= threshold and s.entity_id not in excluded %}
+            {% if s.state | float <= threshold and s.entity_id not in excluded
+                 and (now() - s.last_changed).total_seconds() > 600 %}
               {% set ns.found = true %}
             {% endif %}
           {% endfor %}
@@ -150,7 +152,8 @@ automation:
             {% for s in states.sensor
                 | selectattr('attributes.device_class', 'eq', 'battery')
                 | selectattr('state', 'is_number') %}
-              {% if s.state | float <= threshold and s.entity_id not in excluded %}
+              {% if s.state | float <= threshold and s.entity_id not in excluded
+                   and (now() - s.last_changed).total_seconds() > 600 %}
                 {# Zero-pad level so alphabetic sort == numeric sort (e.g. "009" < "080") #}
                 {% set ns.keyed = ns.keyed + ["%03d" | format(s.state | int) ~ "||" ~ s.name ~ " (" ~ s.state | int ~ "%)"] %}
               {% endif %}
