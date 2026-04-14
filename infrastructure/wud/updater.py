@@ -130,11 +130,12 @@ def wait_for_healthy(container_name: str, timeout: int = 30) -> bool:
         if status in ("exited", "dead") or health == "unhealthy":
             running_since = None
             return False
-        if status == "running" and not health:
-            # No HEALTHCHECK — confirm stable for 5s before passing
+        if status == "running" and health in ("", "starting"):
+            # No HEALTHCHECK, or healthcheck interval hasn't elapsed yet (e.g. 10m interval).
+            # Confirm container stays running for 5s before passing.
             if running_since is None:
                 running_since = time.monotonic()
-                log.info("Container running (no healthcheck) — confirming stability for 5s")
+                log.info("Container running (health=%s) — confirming stability for 5s", health or "none")
             elif time.monotonic() - running_since >= 5:
                 return True
         else:
