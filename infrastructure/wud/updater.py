@@ -177,6 +177,38 @@ def notify_failure(service: str, old_tag: str, new_tag: str, reason: str) -> Non
         _send_notification(payload)
 
 
+def _rollback(container_name: str, image_ref: str, old_tag: str, old_image_id: str,
+              compose_path: str, service: str) -> None:
+    """Retag old image and recreate container from it. Logs outcome."""
+    tag = subprocess.run(
+        ["docker", "tag", old_image_id, f"{image_ref}:{old_tag}"],
+        capture_output=True, text=True,
+    )
+    if tag.returncode != 0:
+        log.error("Rollback: docker tag failed: %s", tag.stderr.strip())
+    else:
+        log.info("Rollback: retagged %s as %s:%s", old_image_id[:19], image_ref, old_tag)
+
+    up = subprocess.run(
+        ["docker", "compose", "-f", compose_path, "up", "-d", "--no-pull", service],
+        capture_output=True, text=True,
+    )
+    if up.returncode != 0:
+        log.error("Rollback: docker compose up failed: %s", up.stderr.strip())
+    else:
+        log.info("Rollback: compose up complete")
+
+    actual = container_full_image(container_name)
+    actual_tag = subprocess.run(
+        ["docker", "inspect", container_name, "--format", "{{.Config.Image}}"],
+        capture_output=True, text=True,
+    ).stdout.strip()
+    if old_tag in actual_tag:
+        log.info("Rollback verified: %s is now running %s", container_name, actual_tag)
+    else:
+        log.error("Rollback FAILED: %s is still running %s (expected %s)", container_name, actual_tag, old_tag)
+
+
 def git_commit(compose_path: str, service: str, old_tag: str, new_tag: str) -> None:
     rel_path = os.path.relpath(compose_path, REPO_PATH)
     env = {
@@ -260,7 +292,7 @@ def handle_update(payload: dict) -> None:
     if up.returncode != 0:
         log.error("docker compose up failed: %s", up.stderr.strip())
         revert_compose_tag(compose_path, new_tag, old_tag)
-        subprocess.run(["docker", "compose", "-f", compose_path, "up", "-d", "--no-pull", service])
+        _rollback(container_name, image_ref, old_tag, old_image_id, compose_path, service)
         notify_failure(service, old_tag, new_tag, "docker compose up failed")
         return
     log.info("Container started")
@@ -269,8 +301,7 @@ def handle_update(payload: dict) -> None:
     if not wait_for_healthy(container_name):
         log.error("Health check failed — rolling back %s to %s", service, old_tag)
         revert_compose_tag(compose_path, new_tag, old_tag)
-        subprocess.run(["docker", "tag", old_image_id, f"{image_ref}:{old_tag}"])
-        subprocess.run(["docker", "compose", "-f", compose_path, "up", "-d", "--no-pull", service])
+        _rollback(container_name, image_ref, old_tag, old_image_id, compose_path, service)
         notify_failure(service, old_tag, new_tag, f"Health check failed — rolled back {new_tag} → {old_tag}")
         return
 
