@@ -60,6 +60,9 @@ WUD's webhook payload sends `image.name` without the registry prefix (e.g. `meal
 ### Quiet hours for failure notifications (2026-04-14)
 Failure notification fired at 01:00 during the first overnight cron run. Fixed with a deferred send: if `notify_failure` is called between 22:00–09:00 CEST, a background `threading.Timer` defers the HA webhook POST until 09:00. Requires correct `TZ` in container (supplied via `global.env`).
 
+### Rollback notification wording (2026-04-14)
+Health check failure notification showed `v3.14.0 → v3.15.0` (the attempted update direction), which was ambiguous after a rollback. Fixed by embedding the rollback direction in the reason string: `Health check failed — rolled back v3.15.0 → v3.14.0`. HA notification template simplified to show `trigger.json.reason` only.
+
 ## Deviations from Plan
 
 - **`wud.trigger.include` labels** — WUD fires all triggers for all containers by default; opt-in is not supported trigger-side. Safe list is enforced by the listener via `docker inspect` label check instead.

@@ -270,7 +270,7 @@ def handle_update(payload: dict) -> None:
         revert_compose_tag(compose_path, new_tag, old_tag)
         subprocess.run(["docker", "tag", old_image_id, f"{image_ref}:{old_tag}"])
         subprocess.run(["docker", "compose", "-f", compose_path, "up", "-d", "--no-pull", service])
-        notify_failure(service, old_tag, new_tag, "Health check failed — rolled back")
+        notify_failure(service, old_tag, new_tag, f"Health check failed — rolled back {new_tag} → {old_tag}")
         return
 
     log.info("Health check passed")
