@@ -2,7 +2,7 @@ name: starr
 
 services:
   radarr:
-    image: ghcr.io/linuxserver/radarr:6.1.1.10360-ls299
+    image: ghcr.io/linuxserver/radarr:6.1.1.10360-ls300
     container_name: radarr
     restart: unless-stopped
     networks:
