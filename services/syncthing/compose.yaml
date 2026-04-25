@@ -2,7 +2,7 @@ name: syncthing
 
 services:
   syncthing:
-    image: ghcr.io/linuxserver/syncthing:v2.0.16-ls214
+    image: ghcr.io/linuxserver/syncthing:v2.0.16-ls215
     container_name: syncthing
     restart: unless-stopped
     networks:
@@ -22,6 +22,7 @@ services:
       - /srv/dev-disk-by-uuid-0ddafbf7-f06d-424d-8e9c-95d97fbd4484/kids:/kids
       - /srv/dev-disk-by-uuid-f1209e02-5b26-491f-ac40-f951e9ddfbb0/movies:/movies
       - /srv/dev-disk-by-uuid-220b73c9-2682-4822-b871-cb499733b15b/tv:/tv
+      - /srv/dev-disk-by-uuid-f1209e02-5b26-491f-ac40-f951e9ddfbb0/MyndirHirslur:/MyndirHirslur
     labels:
       - "wud.autoupdate=true"
       - "traefik.enable=true"
