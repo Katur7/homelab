@@ -15,14 +15,20 @@ services:
       - ./config:/config
     labels:
       - "traefik.enable=true"
-      - "traefik.http.routers.home-assistant.entrypoints=websecure,tunnel"
-      - "traefik.http.routers.home-assistant.rule=Host(`home-assistant.pippinn.me`)"
       # host.docker.internal required because HA uses network_mode:host — Traefik cannot
       # auto-discover the container IP on traefik_internal. host.docker.internal resolves
       # to 172.17.0.1 (docker bridge / host) via extra_hosts in the gateway compose.
+
       - "traefik.http.services.home-assistant.loadbalancer.server.url=http://host.docker.internal:8123"
       - "wud.tag.include=^\\d{4}\\.\\d+\\.\\d+$$"
 
+      # Internal (LAN only — global internal-only middleware applies)
+      - "traefik.http.routers.home-assistant-internal.entrypoints=websecure"
+      - "traefik.http.routers.home-assistant-internal.rule=Host(`home-assistant.pippinn.me`)"
+
+      # Tunnel (external — webhook path only, no Authelia)
+      - "traefik.http.routers.home-assistant-tunnel.entrypoints=tunnel"
+      - "traefik.http.routers.home-assistant-tunnel.rule=Host(`home-assistant.pippinn.me`) && PathPrefix(`/api/webhook/`)"
   matter-server:
     image: ghcr.io/home-assistant-libs/python-matter-server:8.1.0
     container_name: matter-server
