@@ -31,6 +31,8 @@ services:
   socket-proxy:
     image: wollomatic/socket-proxy:1
     container_name: socket-proxy
+    labels:
+      - "wud.tag.include=^\\d+$$"
     environment:
       - SP_LISTENIP=0.0.0.0
       - SP_ALLOWFROM=0.0.0.0/0
@@ -102,6 +104,7 @@ services:
     labels:
       - "traefik.enable=true"
       - "traefik.http.routers.authelia.rule=Host(`auth.pippinn.me`)"
+      - "wud.tag.include=^\\d+\\.\\d+$$"
       - "traefik.http.routers.authelia.entrypoints=websecure,tunnel"
 
   # ── Traefik Reverse Proxy ─────────────────────────────────────────────────────
@@ -129,7 +132,7 @@ services:
       - "traefik.http.routers.traefik-internal.rule=Host(`traefik.internal.pippinn.me`)"
       - "traefik.http.routers.traefik-internal.tls.certresolver=dns-cloudflare"
       - "traefik.http.routers.traefik-internal.service=api@internal"
-      - wud.tag.include=^v\d+$
+      - "wud.tag.include=^v\\d+\\.\\d+$$"
     env_file:
       - ../../global.env
       - vars.env
