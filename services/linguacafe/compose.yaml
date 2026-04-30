@@ -17,11 +17,14 @@ services:
     depends_on:
       mysql:
         condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost/"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 60s
     labels:
-      - "traefik.enable=true"
-      - "traefik.docker.network=traefik_internal"
-      - "traefik.http.routers.linguacafe-internal.entrypoints=websecure"
-      - "traefik.http.routers.linguacafe-internal.rule=Host(`linguacafe.internal.pippinn.me`)"
+      - "traefik.enable=false"
 
   python:
     image: ghcr.io/simjanos-dev/linguacafe-python-service:v0.14.1

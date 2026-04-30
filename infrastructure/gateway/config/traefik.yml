@@ -26,6 +26,9 @@ experimental:
     bouncer:
       moduleName: "github.com/maxlerebourg/crowdsec-bouncer-traefik-plugin"
       version: "v1.5.1" # Check for the latest version on the plugin page
+    sablier:
+      moduleName: "github.com/sablierapp/sablier-traefik-plugin"
+      version: "v1.1.0"
 
 providers:
   docker:

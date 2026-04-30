@@ -1,0 +1,28 @@
+http:
+  routers:
+    linguacafe-internal:
+      entryPoints:
+        - websecure
+      rule: "Host(`linguacafe.internal.pippinn.me`)"
+      middlewares:
+        - sablier-linguacafe
+      service: linguacafe-internal
+
+  services:
+    linguacafe-internal:
+      loadBalancer:
+        servers:
+          - url: "http://linguacafe-webserver/"
+        passHostHeader: true
+
+  middlewares:
+    sablier-linguacafe:
+      plugin:
+        sablier:
+          names: linguacafe-webserver,linguacafe-python-service,linguacafe-database
+          sablierUrl: http://sablier:10000
+          sessionDuration: 1h
+          dynamic:
+            displayName: LinguaCafe
+            showDetails: true
+            refreshFrequency: 5s

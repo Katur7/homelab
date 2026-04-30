@@ -37,6 +37,7 @@ services:
       - SP_LISTENIP=0.0.0.0
       - SP_ALLOWFROM=0.0.0.0/0
       - SP_ALLOW_GET=(/v1\..{1,2})?/(version|containers/.*|networks|nodes|services|system/df|events.*|images/.*)
+      - SP_ALLOW_POST=(/v1\..{1,2})?/containers/(linguacafe-webserver|linguacafe-python-service|linguacafe-database)/(start|stop)
       - SP_ALLOW_HEAD=/_ping
     networks:
       - socket_proxy
@@ -46,6 +47,23 @@ services:
       - no-new-privileges:true
     user: "65534:992"
     restart: unless-stopped
+
+  # ── Sablier ───────────────────────────────────────────────────────────────────
+  # On-demand container scaling — stops idle services, restarts on first request
+  sablier:
+    image: sablierapp/sablier:1.11.2
+    container_name: sablier
+    command:
+      - start
+      - --provider.name=docker
+    environment:
+      - DOCKER_HOST=tcp://socket-proxy:2375
+    networks:
+      - socket_proxy
+      - traefik_internal
+    restart: unless-stopped
+    labels:
+      - "wud.tag.include=^v\\d+\\.\\d+\\.\\d+$$"
 
   # ── CrowdSec WAF ─────────────────────────────────────────────────────────────
   # Reads Traefik access logs and makes ban decisions via LAPI
