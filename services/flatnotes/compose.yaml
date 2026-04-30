@@ -1,0 +1,38 @@
+name: flatnotes
+
+services:
+  flatnotes:
+    image: dullage/flatnotes:v5.5.4
+    container_name: flatnotes
+    restart: unless-stopped
+    networks:
+      - traefik_internal
+    env_file:
+      - ../../global.env
+    environment:
+      FLATNOTES_AUTH_TYPE: none
+    volumes:
+      - ./data:/app/data
+    deploy:
+      resources:
+        limits:
+          memory: 128M
+    healthcheck:
+      interval: 10m
+    labels:
+      - "wud.autoupdate=true"
+      - "traefik.enable=true"
+      - "traefik.docker.network=traefik_internal"
+
+      # Internal — LAN only (global internal-only middleware applied by Traefik)
+      - "traefik.http.routers.flatnotes-internal.entrypoints=websecure"
+      - "traefik.http.routers.flatnotes-internal.rule=Host(`recipes.pippinn.me`)"
+
+      # Tunnel — Authelia gated
+      - "traefik.http.routers.flatnotes-tunnel.entrypoints=tunnel"
+      - "traefik.http.routers.flatnotes-tunnel.rule=Host(`recipes.pippinn.me`)"
+      - "traefik.http.routers.flatnotes-tunnel.middlewares=authelia-auth@file"
+
+networks:
+  traefik_internal:
+    external: true
