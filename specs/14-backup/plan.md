@@ -34,7 +34,6 @@ Full design rationale and decisions: [BACKUP_DESIGN.md](BACKUP_DESIGN.md).
 | **New Borg repo** | `.../backup/borg2` — repokey-blake2 |
 | Immich photos volume | `/srv/dev-disk-by-uuid-0ddafbf7-f06d-424d-8e9c-95d97fbd4484/photos` |
 | Immich Postgres container name | `immich_postgres` |
-| Staging dir (to create) | `.../backup/staging/immich_db/` |
 | Passphrase file (Phase 5 only) | `/root/.borg-passphrase` (0600, root-owned) |
 | pihole-on-pi | `192.168.86.26` — existing Pi, NOT a backup target |
 | offsite-backup-pi | New Pi, to be set up at parents' house — Phase 6 |
@@ -47,8 +46,7 @@ All paths under `/srv/dev-disk-by-uuid-0ddafbf7-f06d-424d-8e9c-95d97fbd4484/` ab
 
 | Prefix | Source | Schedule | Retention |
 |--------|--------|----------|-----------|
-| `immich_photos-` | `.../photos` | Weekly Mon 03:00 | `--keep-weekly 8 --keep-monthly 12 --keep-yearly -1` |
-| `immich_db-` | Staging dir (pg_dumpall output) | Daily 03:00 | `--keep-daily 14 --keep-weekly 8` |
+| `immich_photos-` | `.../photos` (incl. Immich's built-in DB dump at `photos/backups/`) | Weekly Mon 03:00 | `--keep-weekly 8 --keep-monthly 12 --keep-yearly 2` |
 | `homelab-` | `/home/grimur/homelab/` (with exclusions) | Daily 03:30 | `--keep-daily 14 --keep-weekly 8 --keep-monthly 12` |
 
 Legacy prefix `homelab--*` (double-dash): ages out naturally once the new `homelab-`
