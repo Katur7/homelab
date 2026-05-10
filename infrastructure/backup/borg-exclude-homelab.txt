@@ -4,36 +4,47 @@
 # This file is documentation. Enter each path as a separate line
 # in the OMV Borg plugin "Excludes" text box.
 # The plugin generates one --exclude flag per entry.
+# DO NOT paste comment lines (#) into OMV — only paste the paths below the separator.
 #
 # Borg shell-glob patterns (e.g. *.db) are supported in --exclude.
+#
+# Hot database directories (unsafe to copy while running):
+#   - Immich: backed up via immich_db- pg_dumpall job instead
+#   - Vikunja: no dump strategy yet — flagged for future milestone
+#   - LinguaCafe: no dump strategy yet — flagged for future milestone
+#
+# Home Assistant: live SQLite files excluded (*.db, *.db-shm, *.db-wal, db-backup/)
+#
+# Plex: live databases and regenerable data excluded
+#   (Cache, Logs, Media, Codecs, Scanners)
+#
+# CrowdSec: downloaded hub content excluded (regenerable via cscli hub update)
+#
+# LinguaCafe: application logs excluded
+#
+# PiHole: regenerable gravity database and query logs excluded
+#   Config kept: pihole.toml, adlists.list, local.list, hosts — all needed to restore.
+#
+# Syncthing: block index excluded (regenerated on startup)
+#   Config kept: config.xml, cert.pem, key.pem, https-cert.pem, https-key.pem
+#
+# ----------- COPY ONLY THE PATHS BELOW THIS LINE INTO OMV -----------
 
-# --- Hot database directories (unsafe to copy while running) ---
-# Immich: backed up via immich_db- pg_dumpall job instead
 /home/grimur/homelab/services/immich/database/
-# Vikunja: no dump strategy yet — flagged for future milestone
 /home/grimur/homelab/services/vikunja/db/
-# LinguaCafe: no dump strategy yet — flagged for future milestone
 /home/grimur/homelab/services/linguacafe/database/
-
-# --- Home Assistant live SQLite ---
 /home/grimur/homelab/services/home-assistant/config/*.db
 /home/grimur/homelab/services/home-assistant/config/*.db-shm
 /home/grimur/homelab/services/home-assistant/config/*.db-wal
 /home/grimur/homelab/services/home-assistant/config/db-backup/
-
-# --- Plex: live databases (Plex rotates its own timestamped backups) ---
 /home/grimur/homelab/services/plex/config/Library/Application Support/Plex Media Server/Plug-in Support/Databases/*.db
 /home/grimur/homelab/services/plex/config/Library/Application Support/Plex Media Server/Plug-in Support/Databases/*.db-shm
 /home/grimur/homelab/services/plex/config/Library/Application Support/Plex Media Server/Plug-in Support/Databases/*.db-wal
-
-# --- Plex: regenerable data ---
 /home/grimur/homelab/services/plex/config/Library/Application Support/Plex Media Server/Cache/
 /home/grimur/homelab/services/plex/config/Library/Application Support/Plex Media Server/Logs/
 /home/grimur/homelab/services/plex/config/Library/Application Support/Plex Media Server/Media/
 /home/grimur/homelab/services/plex/config/Library/Application Support/Plex Media Server/Codecs/
 /home/grimur/homelab/services/plex/config/Library/Application Support/Plex Media Server/Scanners/
-
-# --- CrowdSec: downloaded hub content (regenerable via cscli hub update) ---
 /home/grimur/homelab/infrastructure/gateway/config/crowdsec/hub/
 /home/grimur/homelab/infrastructure/gateway/config/crowdsec/collections/
 /home/grimur/homelab/infrastructure/gateway/config/crowdsec/parsers/
@@ -44,12 +55,7 @@
 /home/grimur/homelab/infrastructure/gateway/config/crowdsec/appsec-configs/
 /home/grimur/homelab/infrastructure/gateway/config/crowdsec/appsec-rules/
 /home/grimur/homelab/infrastructure/gateway/config/crowdsec/logs/
-
-# --- LinguaCafe: application logs ---
 /home/grimur/homelab/services/linguacafe/storage/logs/
-
-# --- PiHole: regenerable gravity database and query logs ---
-# Config (pihole.toml, adlists.list, local.list, hosts) is kept — that's all needed to restore.
 /home/grimur/homelab/infrastructure/dns/config/gravity.db
 /home/grimur/homelab/infrastructure/dns/config/gravity_old.db
 /home/grimur/homelab/infrastructure/dns/config/gravity_backups/
@@ -57,7 +63,4 @@
 /home/grimur/homelab/infrastructure/dns/config/pihole-FTL.db
 /home/grimur/homelab/infrastructure/dns/config/pihole-FTL.db-shm
 /home/grimur/homelab/infrastructure/dns/config/pihole-FTL.db-wal
-
-# --- Syncthing: block index (regenerated on startup) ---
-# Keep: config.xml, cert.pem, key.pem, https-cert.pem, https-key.pem
 /home/grimur/homelab/services/syncthing/config/index-v2/
