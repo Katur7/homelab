@@ -1,4 +1,34 @@
 - sensor:
+  - name: "Word of the Day Part of Speech"
+    unique_id: word_of_the_day_pos
+    state: >
+      {% set pos = state_attr('sensor.word_of_the_day', 'pos') %}
+      {% if pos is not none %}
+        {{ pos }}
+      {% else %}
+        None
+      {% endif %}
+- sensor:
+  - name: "Word of the Day Gender"
+    unique_id: word_of_the_day_gender
+    state: >
+      {% set gender = state_attr('sensor.word_of_the_day', 'gender') %}
+      {% if gender is not none %}
+        {{ gender }}
+      {% else %}
+        None
+      {% endif %}
+- sensor:
+  - name: "Word of the Day Inflection"
+    unique_id: word_of_the_day_stuttbeyg
+    state: >
+      {% set stuttbeyg = state_attr('sensor.word_of_the_day', 'stuttbeyg') %}
+      {% if stuttbeyg is not none %}
+        {{ stuttbeyg }}
+      {% else %}
+        None
+      {% endif %}
+- sensor:
   - name: "Word of the Day Translations"
     unique_id: word_of_the_day_translations
     state: >
