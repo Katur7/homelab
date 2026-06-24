@@ -46,7 +46,7 @@ services:
       - "wud.tag.transform=^(\\d+\\.\\d+\\.\\d+)\\.\\d+(-ls\\d+)$$ => $$1$$2"
 
   prowlarr:
-    image: linuxserver/prowlarr:2.4.0.5397-ls150
+    image: linuxserver/prowlarr:2.4.0.5397-ls151
     container_name: prowlarr
     restart: unless-stopped
     networks:
