@@ -10,7 +10,7 @@ networks:
 
 services:
   whatsupdocker:
-    image: getwud/wud:8.2.2
+    image: getwud/wud:8.3.0
     container_name: update
     env_file:
       - ../../global.env
