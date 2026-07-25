@@ -1,15 +1,13 @@
 # Tailscale
 # Mesh VPN — kernel mode (TS_USERSPACE=false), authenticated via auth key
-
-networks:
-  traefik_internal:
-    external: true
+# network_mode: host so the NAS host can reach Tailscale peers (e.g. backup-pi)
 
 services:
   tailscale:
     image: tailscale/tailscale:v1.96.5
     container_name: tailscale
     hostname: pippinn
+    network_mode: host
     env_file:
       - ../../global.env
       - vars.env
@@ -20,6 +18,4 @@ services:
       - /dev/net/tun:/dev/net/tun
     cap_add:
       - net_admin
-    networks:
-      - traefik_internal
     restart: unless-stopped
