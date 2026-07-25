@@ -16,7 +16,9 @@
 # Home Assistant: live SQLite files excluded (*.db, *.db-shm, *.db-wal, db-backup/)
 #
 # Plex: live databases and regenerable data excluded
-#   (Cache, Logs, Media, Codecs, Scanners)
+#   (Cache, Logs, Media, Codecs, Scanners, Metadata)
+#
+# Traefik: access logs excluded (regenerated, read by CrowdSec in real-time)
 #
 # CrowdSec: downloaded hub content excluded (regenerable via cscli hub update)
 #
@@ -24,6 +26,9 @@
 #
 # PiHole: regenerable gravity database and query logs excluded
 #   Config kept: pihole.toml, adlists.list, local.list, hosts — all needed to restore.
+#
+# Starr apps (Sonarr/Radarr/Prowlarr): logs, MediaCover, Backups, Sentry, and
+#   Prowlarr Definitions excluded (all regenerable or redundant inside borg)
 #
 # Syncthing: block index excluded (regenerated on startup)
 #   Config kept: config.xml, cert.pem, key.pem, https-cert.pem, https-key.pem
@@ -44,6 +49,7 @@
 /home/grimur/homelab/services/plex/config/Library/Application Support/Plex Media Server/Logs/
 /home/grimur/homelab/services/plex/config/Library/Application Support/Plex Media Server/Media/
 /home/grimur/homelab/services/plex/config/Library/Application Support/Plex Media Server/Codecs/
+/home/grimur/homelab/services/plex/config/Library/Application Support/Plex Media Server/Metadata/
 /home/grimur/homelab/services/plex/config/Library/Application Support/Plex Media Server/Scanners/
 /home/grimur/homelab/infrastructure/gateway/config/crowdsec/hub/
 /home/grimur/homelab/infrastructure/gateway/config/crowdsec/collections/
@@ -56,6 +62,7 @@
 /home/grimur/homelab/infrastructure/gateway/config/crowdsec/appsec-rules/
 /home/grimur/homelab/infrastructure/gateway/config/crowdsec/logs/
 /home/grimur/homelab/services/linguacafe/storage/logs/
+/home/grimur/homelab/infrastructure/gateway/logs/
 /home/grimur/homelab/infrastructure/dns/config/gravity.db
 /home/grimur/homelab/infrastructure/dns/config/gravity_old.db
 /home/grimur/homelab/infrastructure/dns/config/gravity_backups/
@@ -63,4 +70,16 @@
 /home/grimur/homelab/infrastructure/dns/config/pihole-FTL.db
 /home/grimur/homelab/infrastructure/dns/config/pihole-FTL.db-shm
 /home/grimur/homelab/infrastructure/dns/config/pihole-FTL.db-wal
+/home/grimur/homelab/services/starr/sonarr-config/logs/
+/home/grimur/homelab/services/starr/sonarr-config/Backups/
+/home/grimur/homelab/services/starr/sonarr-config/MediaCover/
+/home/grimur/homelab/services/starr/sonarr-config/Sentry/
+/home/grimur/homelab/services/starr/radarr-config/logs/
+/home/grimur/homelab/services/starr/radarr-config/Backups/
+/home/grimur/homelab/services/starr/radarr-config/MediaCover/
+/home/grimur/homelab/services/starr/radarr-config/Sentry/
+/home/grimur/homelab/services/starr/prowlarr-config/logs/
+/home/grimur/homelab/services/starr/prowlarr-config/Backups/
+/home/grimur/homelab/services/starr/prowlarr-config/Sentry/
+/home/grimur/homelab/services/starr/prowlarr-config/Definitions/
 /home/grimur/homelab/services/syncthing/config/index-v2/
