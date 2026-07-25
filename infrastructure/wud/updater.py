@@ -265,19 +265,32 @@ def handle_update(payload: dict) -> None:
 
     # Get fully-qualified image name from running container (WUD payload strips registry)
     image_ref = container_full_image(container_name)
-    log.info("Pulling %s:%s", image_ref, new_tag)
-    pull = subprocess.run(
-        ["docker", "pull", f"{image_ref}:{new_tag}"], capture_output=True, text=True
-    )
-    if pull.returncode != 0:
-        log.error("Pull failed: %s", pull.stderr.strip())
-        notify_failure(service, old_tag, new_tag, f"Pull failed: {pull.stderr.strip()}")
-        return
+    pull_ref = f"{image_ref}:{new_tag}"
+    log.info("Pulling %s", pull_ref)
+    max_retries = 3
+    for attempt in range(1, max_retries + 1):
+        pull = subprocess.run(
+            ["docker", "pull", pull_ref], capture_output=True, text=True
+        )
+        if pull.returncode == 0:
+            break
+        if "toomanyrequests" in pull.stderr.lower() and attempt < max_retries:
+            wait = 15 * attempt
+            log.warning("Pull rate-limited (attempt %d/%d), retrying in %ds", attempt, max_retries, wait)
+            time.sleep(wait)
+        else:
+            log.error("Pull failed: %s", pull.stderr.strip())
+            notify_failure(service, old_tag, new_tag, f"Pull failed: {pull.stderr.strip()}")
+            return
     log.info("Pull complete")
 
     # Edit compose.yaml
     log.info("Updating compose tag: %s → %s in %s", old_tag, new_tag, compose_path)
     if not update_compose_tag(compose_path, old_tag, new_tag):
+        with open(compose_path) as f:
+            if new_tag in f.read():
+                log.info("Tag %s already present in %s — skipping (duplicate webhook?)", new_tag, compose_path)
+                return
         log.error("Tag %s not found in %s — aborting", old_tag, compose_path)
         notify_failure(service, old_tag, new_tag, "Tag not found in compose file")
         return
