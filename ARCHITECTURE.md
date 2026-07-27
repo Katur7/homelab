@@ -6,6 +6,7 @@
 |------|------|--------|-----------|
 | OMV NAS | Primary host — all production services, Traefik, Cloudflare Tunnel | `192.168.86.17` | `services/`, `infrastructure/` |
 | Raspberry Pi | Secondary host — backup DNS, sync, monitoring, Immich ML | `192.168.86.26` | `pi/` |
+| Backup Pi | Offsite backup target (parents' house, Tailscale-only) | `100.110.206.9` | — |
 
 **NAS PiHole** (primary DNS): macvlan IP `192.168.86.27`
 **Pi PiHole** (backup DNS): direct port on Pi LAN IP `192.168.86.26`
@@ -64,14 +65,14 @@ by the BorgBackup job which sources `/home/grimur/homelab/`.
 
 ## 🔒 Backup Strategy
 
-### Homelab Repository Backup (Milestone 02)
-- **Tool:** OMV BorgBackup plugin
-- **Source:** `/home/grimur/homelab/`
-- **Destination:** Local Borg repo on NAS share
-- **Schedule:** Daily at 02:00 — retention: 7 daily / 4 weekly / 3 monthly
-- **Note:** Local-only; offsite is a future milestone.
+| Tier | Tool | Destination | Schedule | Sources |
+|------|------|-------------|----------|---------|
+| Local | OMV BorgBackup plugin | Borg repo on NAS share | Daily 02:00 | `homelab/` + Immich photos |
+| Offsite | `backup-to-pi.sh` | Pi 4 at offsite location (Tailscale) | Weekly Sun 04:00 | `homelab/` + Immich photos |
 
-> Full details in [`specs/02-backup/`](specs/02-backup/).
+Both repos use `repokey-blake2` encryption.
+
+> Full details, restore procedures, and runbooks in [`infrastructure/backup/`](infrastructure/backup/).
 
 ## 🔧 Scripts & Tooling
 
