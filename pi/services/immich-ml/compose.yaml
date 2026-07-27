@@ -2,7 +2,7 @@ name: immich-ml
 
 services:
   immich-machine-learning:
-    image: ghcr.io/immich-app/immich-machine-learning:v2.6.1
+    image: ghcr.io/immich-app/immich-machine-learning:v3.0.3
     container_name: immich_machine_learning
     restart: unless-stopped
     ports:

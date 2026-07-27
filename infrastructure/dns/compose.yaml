@@ -24,7 +24,7 @@ networks:
 
 services:
   pihole:
-    image: pihole/pihole:2026.04.1
+    image: pihole/pihole:2026.07.2
     container_name: pihole
     hostname: pihole
     env_file:

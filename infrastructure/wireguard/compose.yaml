@@ -4,7 +4,7 @@
 
 services:
   wireguard:
-    image: ghcr.io/linuxserver/wireguard:1.0.20250521
+    image: ghcr.io/linuxserver/wireguard:1.0.20260223
     container_name: wireguard
     cap_add:
       - NET_ADMIN

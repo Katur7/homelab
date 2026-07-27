@@ -13,7 +13,7 @@ services:
   # ── Cloudflare Tunnel ─────────────────────────────────────────────────────────
   # Tunnels external traffic to Traefik via the traefik_tunnel network
   cloudflared:
-    image: cloudflare/cloudflared:2026.3.0
+    image: cloudflare/cloudflared:2026.7.3
     container_name: cloudflared
     networks:
       - traefik_tunnel
@@ -29,7 +29,7 @@ services:
   # Keeps vpn.pippinn.me A record pointing to the current public IP
   # CLOUDFLARE_API_TOKEN env var overrides api_token field in config.json
   cloudflare-ddns:
-    image: timothyjmiller/cloudflare-ddns:2.1.2
+    image: timothyjmiller/cloudflare-ddns:2.2.0
     container_name: cloudflare-ddns
     networks:
       - traefik_tunnel
