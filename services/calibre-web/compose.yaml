@@ -2,7 +2,7 @@ name: calibre-web
 
 services:
   calibre-web:
-    image: ghcr.io/linuxserver/calibre-web:0.6.26-ls391
+    image: ghcr.io/linuxserver/calibre-web:0.6.26-ls392
     container_name: calibre-web
     restart: unless-stopped
     networks:
