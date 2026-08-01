@@ -37,7 +37,7 @@ fi
 echo "Authenticating with PiHole at ${PIHOLE_HOST}..."
 AUTH_RESPONSE=$(curl -sf -X POST "${PIHOLE_HOST}/api/auth" \
   -H "Content-Type: application/json" \
-  -d "{\"password\": \"${PIHOLE_PASSWORD}\"}")
+  -d "$(jq -nc --arg pw "$PIHOLE_PASSWORD" '{password: $pw}')")
 
 SID=$(echo "$AUTH_RESPONSE" | jq -r '.session.sid // empty')
 
