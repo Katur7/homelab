@@ -2,7 +2,7 @@ name: syncthing
 
 services:
   syncthing:
-    image: ghcr.io/linuxserver/syncthing:v2.1.3-ls227
+    image: ghcr.io/linuxserver/syncthing:v2.1.3-ls228
     container_name: syncthing
     restart: unless-stopped
     networks:
