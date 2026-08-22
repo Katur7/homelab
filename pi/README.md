@@ -20,6 +20,7 @@ and uptime monitoring (UptimeKuma).
 |---------|------|-----|
 | PiHole (backup DNS) | 53, 80 | `http://192.168.86.26/admin` |
 | UptimeKuma | 3001 | `http://192.168.86.26:3001` |
+| Photoframe | 8088 | `http://photoframe.internal.pippinn.me:8088/current.png` |
 
 Nebula-Sync has no web UI — runs as a sidecar to PiHole.
 Docker image updates are handled by a weekly cron job (`pi/scripts/update-containers.sh`).
@@ -71,4 +72,5 @@ pi/
   services/
     pihole/           # PiHole + Nebula-Sync (same stack)
     uptime-kuma/
+    photoframe/       # Documentation only — stack lives in ~/photoframe-server
 ```
