@@ -21,3 +21,10 @@ scene: !include scenes.yaml
 template: !include_dir_merge_list templates/
 sensor: !include_dir_merge_list sensors/
 notify: !include notify.yaml
+
+zha:
+  zigpy_config:
+    ota:
+      extra_providers:
+        - type: z2m
+          url: https://raw.githubusercontent.com/Koenkk/zigbee-OTA/master/index.json
