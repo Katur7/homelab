@@ -1,0 +1,63 @@
+# Package: Dimmer Monitor
+# Tracks Aqara T2 dimmer (master bedroom) restarts and auto-restores
+# minimum brightness after device restart.
+
+automation:
+  # 1. Log when the dimmer goes unavailable (restart detected)
+  - id: dimmer_monitor_restart_detected
+    alias: "Dimmer Monitor: Restart Detected"
+    triggers:
+      - trigger: state
+        entity_id: light.aqara_dimmer_master_bedroom
+        to: "unavailable"
+    actions:
+      - action: logbook.log
+        data:
+          name: "Dimmer Monitor"
+          message: "Master bedroom dimmer went unavailable (restart detected)"
+          entity_id: light.aqara_dimmer_master_bedroom
+
+  # 2. Restore min brightness after dimmer comes back online
+  - id: dimmer_monitor_restore_min_brightness
+    alias: "Dimmer Monitor: Restore Min Brightness"
+    triggers:
+      - trigger: state
+        entity_id: light.aqara_dimmer_master_bedroom
+        from: "unavailable"
+    conditions:
+      - condition: template
+        value_template: "{{ trigger.to_state.state in ['on', 'off'] }}"
+    actions:
+      - delay:
+          seconds: 10
+      - action: number.set_value
+        target:
+          entity_id: number.aqara_dimmer_master_bedroom_minimum_brightness
+        data:
+          value: 80
+      - action: logbook.log
+        data:
+          name: "Dimmer Monitor"
+          message: >
+            Dimmer came back online — restored minimum brightness to 80
+          entity_id: number.aqara_dimmer_master_bedroom_minimum_brightness
+
+  # 3. Log when min brightness drifts from expected value
+  - id: dimmer_monitor_brightness_drift
+    alias: "Dimmer Monitor: Min Brightness Drift"
+    triggers:
+      - trigger: state
+        entity_id: number.aqara_dimmer_master_bedroom_minimum_brightness
+    conditions:
+      - condition: template
+        value_template: >
+          {{ trigger.to_state.state not in ['unavailable', 'unknown']
+             and trigger.from_state.state not in ['unavailable', 'unknown']
+             and trigger.to_state.state | float != 80 }}
+    actions:
+      - action: logbook.log
+        data:
+          name: "Dimmer Monitor"
+          message: >
+            Min brightness changed: {{ trigger.from_state.state }} → {{ trigger.to_state.state }} (expected 80)
+          entity_id: number.aqara_dimmer_master_bedroom_minimum_brightness
