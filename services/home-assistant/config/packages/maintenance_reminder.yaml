@@ -1,0 +1,252 @@
+# Package: Maintenance Reminder
+# Generic interval- and calendar-based maintenance task reminders.
+# See: services/home-assistant/specs/03-maintenance-reminder/plan.md
+
+# ---------------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------------
+
+input_datetime:
+  # Configurable reminder time (time-only, default 16:00)
+  maintenance_reminder_time:
+    name: "Maintenance Reminder Time"
+    has_date: false
+    has_time: true
+
+  # ac_filter — every 14 days
+  maintenance_ac_filter_last_done:
+    name: "AC Filter: Last Done"
+    has_date: true
+    has_time: true
+  maintenance_ac_filter_snooze_until:
+    name: "AC Filter: Snooze Until"
+    has_date: true
+    has_time: true
+
+  # plant_office — every 7 days
+  maintenance_plant_office_last_done:
+    name: "Office Plant: Last Done"
+    has_date: true
+    has_time: true
+  maintenance_plant_office_snooze_until:
+    name: "Office Plant: Snooze Until"
+    has_date: true
+    has_time: true
+
+  # bike_tyre — every 30 days
+  maintenance_bike_tyre_last_done:
+    name: "Bike Tyre: Last Done"
+    has_date: true
+    has_time: true
+  maintenance_bike_tyre_snooze_until:
+    name: "Bike Tyre: Snooze Until"
+    has_date: true
+    has_time: true
+
+  # bike_chain — every 30 days
+  maintenance_bike_chain_last_done:
+    name: "Bike Chain: Last Done"
+    has_date: true
+    has_time: true
+  maintenance_bike_chain_snooze_until:
+    name: "Bike Chain: Snooze Until"
+    has_date: true
+    has_time: true
+
+  # water_line — Oct 1 annually
+  maintenance_water_line_last_done:
+    name: "Water Line: Last Done"
+    has_date: true
+    has_time: true
+  maintenance_water_line_snooze_until:
+    name: "Water Line: Snooze Until"
+    has_date: true
+    has_time: true
+
+# ---------------------------------------------------------------------------
+# Scripts
+# ---------------------------------------------------------------------------
+
+script:
+  maintenance_send_reminder:
+    alias: "Maintenance: Send Reminder"
+    fields:
+      task_id:
+        description: "Unique task identifier (snake_case)"
+      task_name:
+        description: "Human-readable task name"
+    sequence:
+      - action: !secret phone_notify_service
+        data:
+          title: "Maintenance Reminder"
+          message: "Time to: {{ task_name }}"
+          data:
+            tag: "maintenance_{{ task_id }}"
+            actions:
+              - action: "MAINTENANCE_DONE_{{ task_id | upper }}"
+                title: "Done"
+              - action: "MAINTENANCE_SNOOZE_DAY_{{ task_id | upper }}"
+                title: "Snooze 1 day"
+              - action: "MAINTENANCE_SNOOZE_WEEK_{{ task_id | upper }}"
+                title: "Snooze 1 week"
+
+# ---------------------------------------------------------------------------
+# Automations
+# ---------------------------------------------------------------------------
+
+automation:
+  # 1. Daily check — fires at configurable reminder time
+  - id: maintenance_daily_check
+    alias: maintenance_daily_check
+    triggers:
+      - trigger: time
+        at: input_datetime.maintenance_reminder_time
+    conditions: []
+    actions:
+      # ac_filter: every 14 days
+      - if:
+          - condition: template
+            value_template: >
+              {{ (now() - (states('input_datetime.maintenance_ac_filter_last_done')
+                  | as_datetime(default=now() - timedelta(days=999)) | as_local)).days >= 14
+                 and now() > (states('input_datetime.maintenance_ac_filter_snooze_until')
+                  | as_datetime(default=now() - timedelta(days=1)) | as_local) }}
+        then:
+          - action: script.maintenance_send_reminder
+            data:
+              task_id: "ac_filter"
+              task_name: "Clean AC filters"
+
+      # plant_office: every 7 days
+      - if:
+          - condition: template
+            value_template: >
+              {{ (now() - (states('input_datetime.maintenance_plant_office_last_done')
+                  | as_datetime(default=now() - timedelta(days=999)) | as_local)).days >= 7
+                 and now() > (states('input_datetime.maintenance_plant_office_snooze_until')
+                  | as_datetime(default=now() - timedelta(days=1)) | as_local) }}
+        then:
+          - action: script.maintenance_send_reminder
+            data:
+              task_id: "plant_office"
+              task_name: "Water office plant"
+
+      # bike_tyre: every 30 days
+      - if:
+          - condition: template
+            value_template: >
+              {{ (now() - (states('input_datetime.maintenance_bike_tyre_last_done')
+                  | as_datetime(default=now() - timedelta(days=999)) | as_local)).days >= 30
+                 and now() > (states('input_datetime.maintenance_bike_tyre_snooze_until')
+                  | as_datetime(default=now() - timedelta(days=1)) | as_local) }}
+        then:
+          - action: script.maintenance_send_reminder
+            data:
+              task_id: "bike_tyre"
+              task_name: "Check bike tyre pressure"
+
+      # bike_chain: every 30 days
+      - if:
+          - condition: template
+            value_template: >
+              {{ (now() - (states('input_datetime.maintenance_bike_chain_last_done')
+                  | as_datetime(default=now() - timedelta(days=999)) | as_local)).days >= 30
+                 and now() > (states('input_datetime.maintenance_bike_chain_snooze_until')
+                  | as_datetime(default=now() - timedelta(days=1)) | as_local) }}
+        then:
+          - action: script.maintenance_send_reminder
+            data:
+              task_id: "bike_chain"
+              task_name: "Lube bike chain"
+
+  # 2. Water line — Oct 1 annually
+  - id: maintenance_water_line_check
+    alias: maintenance_water_line_check
+    triggers:
+      - trigger: time
+        at: input_datetime.maintenance_reminder_time
+    conditions:
+      - condition: template
+        value_template: "{{ now().month == 10 and now().day == 1 }}"
+      - condition: template
+        value_template: >
+          {{ states('input_datetime.maintenance_water_line_last_done')[:4]
+             != now().strftime('%Y') }}
+      - condition: template
+        value_template: >
+          {{ now() > (states('input_datetime.maintenance_water_line_snooze_until')
+             | as_datetime(default=now() - timedelta(days=1)) | as_local) }}
+    actions:
+      - action: script.maintenance_send_reminder
+        data:
+          task_id: "water_line"
+          task_name: "Empty outside water line before frost"
+
+  # 3. Action: Done
+  - id: maintenance_action_done
+    alias: maintenance_action_done
+    triggers:
+      - trigger: event
+        event_type: mobile_app_notification_action
+    conditions:
+      - condition: template
+        value_template: "{{ trigger.event.data.action.startswith('MAINTENANCE_DONE_') }}"
+    actions:
+      - variables:
+          task_id: "{{ trigger.event.data.action | replace('MAINTENANCE_DONE_', '') | lower }}"
+      - action: input_datetime.set_datetime
+        target:
+          entity_id: "input_datetime.maintenance_{{ task_id }}_last_done"
+        data:
+          datetime: "{{ now().strftime('%Y-%m-%d %H:%M:%S') }}"
+      - action: !secret phone_notify_service
+        data:
+          message: clear_notification
+          data:
+            tag: "maintenance_{{ task_id }}"
+
+  # 4. Action: Snooze 1 day
+  - id: maintenance_action_snooze_day
+    alias: maintenance_action_snooze_day
+    triggers:
+      - trigger: event
+        event_type: mobile_app_notification_action
+    conditions:
+      - condition: template
+        value_template: "{{ trigger.event.data.action.startswith('MAINTENANCE_SNOOZE_DAY_') }}"
+    actions:
+      - variables:
+          task_id: "{{ trigger.event.data.action | replace('MAINTENANCE_SNOOZE_DAY_', '') | lower }}"
+      - action: input_datetime.set_datetime
+        target:
+          entity_id: "input_datetime.maintenance_{{ task_id }}_snooze_until"
+        data:
+          datetime: "{{ (now() + timedelta(days=1)).strftime('%Y-%m-%d 00:00:00') }}"
+      - action: !secret phone_notify_service
+        data:
+          message: clear_notification
+          data:
+            tag: "maintenance_{{ task_id }}"
+
+  # 5. Action: Snooze 1 week
+  - id: maintenance_action_snooze_week
+    alias: maintenance_action_snooze_week
+    triggers:
+      - trigger: event
+        event_type: mobile_app_notification_action
+    conditions:
+      - condition: template
+        value_template: "{{ trigger.event.data.action.startswith('MAINTENANCE_SNOOZE_WEEK_') }}"
+    actions:
+      - variables:
+          task_id: "{{ trigger.event.data.action | replace('MAINTENANCE_SNOOZE_WEEK_', '') | lower }}"
+      - action: input_datetime.set_datetime
+        target:
+          entity_id: "input_datetime.maintenance_{{ task_id }}_snooze_until"
+        data:
+          datetime: "{{ (now() + timedelta(days=7)).strftime('%Y-%m-%d 00:00:00') }}"
+      - action: !secret phone_notify_service
+        data:
+          message: clear_notification
+          data:
+            tag: "maintenance_{{ task_id }}"
