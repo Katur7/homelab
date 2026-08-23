@@ -7,7 +7,6 @@ services:
     restart: unless-stopped
     network_mode: host
     privileged: true
-    entrypoint: ["/bin/sh", "-c", "sleep 60 && exec /init"]
     env_file:
       - ../../global.env
     devices:
