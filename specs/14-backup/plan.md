@@ -91,7 +91,7 @@ a fresh repo was created. `borg key migrate-to-repokey` does not respect
 - [x] Old `borg/` repo left untouched — decommission after one week of clean runs on `borg2`
 - [x] `/root/keyfile.bak.20260429` on NAS — delete after decommission
 
-## Phase 2 — Update homelab job in OMV plugin UI
+## Phase 2 — Update homelab job in OMV plugin UI (COMPLETE)
 
 Exclusions file already created at:
 `/home/grimur/homelab/infrastructure/backup/borg-exclude-homelab.txt`
@@ -107,7 +107,7 @@ After saving, check the generated script under `/var/lib/openmediavault/borgback
 to confirm `--patterns-from` appears correctly. Trigger a manual run and verify a
 `homelab-{timestamp}` archive appears in `borg list .../backup/borg2`.
 
-## Phase 3 — Add immich_db daily job in OMV plugin UI
+## Phase 3 — Immich DB backup (COMPLETE — uses Immich built-in dumper)
 
 Create staging directory first:
 ```bash
@@ -145,20 +145,16 @@ Validation:
 - Confirm staging dir is empty after run
 - Test restore on a throwaway container (see Phase 7)
 
-## Phase 4 — Update immich_photos job in OMV plugin UI
+## Phase 4 — Update immich_photos job in OMV plugin UI (COMPLETE)
 
 Edit the existing weekly immich_photos job:
 - **Repo path**: `.../backup/borg` → `.../backup/borg2`
 - Prefix, exclusions, and retention unchanged
 
-Trigger a manual run. First run is a full backup (~28GB — will take time).
-
-After one week of clean runs on all three jobs in `borg2`:
-```bash
-# Decommission old repo
-rm -rf /srv/dev-disk-by-uuid-0ddafbf7-f06d-424d-8e9c-95d97fbd4484/backup/borg
-rm /root/keyfile.bak.20260429
-```
+Old repo decommissioned 2026-08-12:
+- `rm -rf .../backup/borg` — 53 GB freed
+- `rm /root/keyfile.bak.20260429`
+- Old repo removed from OMV plugin UI
 
 ## Phase 5 — Desktop repo (β1)
 
@@ -210,7 +206,7 @@ Steps:
   - Service: `systemd-inhibit --what=sleep --who=borg --why="backup" ssh root@nas` (restricted key)
 - [ ] Test: sleep desktop past scheduled time, wake, confirm new archive in desktop repo
 
-## Phase 6 — offsite-backup-pi (deferred)
+## Phase 6 — offsite-backup-pi (COMPLETE — see 14.1-backup-pi/)
 
 Blocked on: `offsite-backup-pi` hardware acquisition and setup.
 
