@@ -2,7 +2,7 @@ name: flatnotes
 
 services:
   flatnotes:
-    image: dullage/flatnotes:v5.5.4
+    image: dullage/flatnotes:v5.5.5
     container_name: flatnotes
     restart: unless-stopped
     networks:
