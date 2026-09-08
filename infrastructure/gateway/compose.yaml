@@ -68,7 +68,7 @@ services:
   # ── CrowdSec WAF ─────────────────────────────────────────────────────────────
   # Reads Traefik access logs and makes ban decisions via LAPI
   crowdsec:
-    image: crowdsecurity/crowdsec:v1.7.8
+    image: crowdsecurity/crowdsec:v1.8.1
     container_name: crowdsec
     env_file:
       - ../../global.env
