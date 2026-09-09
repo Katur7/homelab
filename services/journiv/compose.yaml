@@ -69,6 +69,8 @@ services:
     image: valkey/valkey:9.0-alpine
     container_name: journiv-valkey
     restart: unless-stopped
+    labels:
+      - "wud.tag.include=^\\d+\\.\\d+-alpine$$"
     volumes:
       - ./data/valkey:/data
     networks:
