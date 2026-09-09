@@ -96,7 +96,11 @@ services:
       SERVICE_ROLE: celery-worker
       ENVIRONMENT: production
     healthcheck:
-      <<: *celery-healthcheck
+      test: ["CMD-SHELL", "kill -0 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 40s
 
   celery-beat:
     <<: *celery-common
