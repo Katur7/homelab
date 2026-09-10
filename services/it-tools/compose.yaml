@@ -14,6 +14,11 @@ services:
       - "traefik.http.routers.tools-internal.entrypoints=websecure"
       - "traefik.http.routers.tools-internal.rule=Host(`tools.internal.pippinn.me`)"
       - "traefik.docker.network=traefik_internal"
+    deploy:
+      resources:
+        limits:
+          cpus: "0.1"
+          memory: 32M
 
 networks:
   traefik_internal:

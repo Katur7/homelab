@@ -27,6 +27,11 @@ services:
       - "traefik.http.routers.wud.rule=Host(`update.internal.pippinn.me`)"
       - "traefik.docker.network=traefik_internal"
     restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: "0.5"
+          memory: 256M
 
   autoupdater:
     build: .
@@ -49,3 +54,8 @@ services:
     extra_hosts:
       - "host.docker.internal:host-gateway"
     restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: "0.25"
+          memory: 64M

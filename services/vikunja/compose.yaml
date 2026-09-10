@@ -28,6 +28,11 @@ services:
       - "traefik.http.routers.todo-tunnel.entrypoints=tunnel"
       - "traefik.http.routers.todo-tunnel.rule=Host(`todo.pippinn.me`)"
       - "traefik.http.routers.todo-tunnel.middlewares=authelia-auth@file"
+    deploy:
+      resources:
+        limits:
+          cpus: "0.5"
+          memory: 128M
 
   db:
     image: postgres:17
@@ -44,6 +49,11 @@ services:
       interval: 30s
     labels:
       - "wud.watch=false"
+    deploy:
+      resources:
+        limits:
+          cpus: "0.25"
+          memory: 128M
 
 networks:
   traefik_internal:

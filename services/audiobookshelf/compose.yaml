@@ -37,6 +37,11 @@ services:
       - "traefik.http.routers.audiobookshelf-discovery.entrypoints=tunnel"
       - "traefik.http.routers.audiobookshelf-discovery.rule=Host(`audiobookshelf.pippinn.me`) && (Path(`/status`) || Path(`/api/languages`) || Path(`/api/server/settings`))"
       - "traefik.http.routers.audiobookshelf-discovery.priority=150"
+    deploy:
+      resources:
+        limits:
+          cpus: "0.5"
+          memory: 256M
 
 networks:
   traefik_internal:

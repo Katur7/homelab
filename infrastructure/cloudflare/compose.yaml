@@ -24,6 +24,11 @@ services:
     env_file:
       - .env
     restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: "0.25"
+          memory: 128M
 
   # ── Cloudflare DDNS ───────────────────────────────────────────────────────────
   # Keeps vpn.pippinn.me A record pointing to the current public IP
@@ -40,3 +45,8 @@ services:
       - vars.env
       - .env
     restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: "0.1"
+          memory: 32M

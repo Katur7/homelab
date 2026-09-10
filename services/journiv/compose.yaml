@@ -81,6 +81,11 @@ services:
       timeout: 5s
       retries: 5
       start_period: 10s
+    deploy:
+      resources:
+        limits:
+          cpus: "0.25"
+          memory: 64M
 
   celery-worker:
     <<: *celery-common
