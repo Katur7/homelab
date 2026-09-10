@@ -107,6 +107,12 @@ script:
         description: "Final reminder — only show taken button, do not start timeout timer"
         default: false
     sequence:
+      - action: logbook.log
+        data:
+          name: "Medication"
+          message: >
+            send_reminder called — message: {{ message }}
+          entity_id: input_boolean.medication_notified_today
       - action: input_boolean.turn_on
         target:
           entity_id: input_boolean.medication_notified_today
@@ -195,6 +201,12 @@ automation:
         entity_id: timer.medication_snooze
         state: idle
     actions:
+      - action: logbook.log
+        data:
+          name: "Medication"
+          message: >
+            off-charger detected — starting 30-min snooze timer
+          entity_id: timer.medication_snooze
       - action: timer.start
         target:
           entity_id: timer.medication_snooze
@@ -214,6 +226,12 @@ automation:
         value_template: >
           {{ states('input_datetime.medication_last_taken')[:10] != now().strftime('%Y-%m-%d') }}
     actions:
+      - action: logbook.log
+        data:
+          name: "Medication"
+          message: >
+            snooze timer finished — sending reminder
+          entity_id: timer.medication_snooze
       - action: script.medication_send_reminder
         data:
           message: "Have you taken your medication today?"

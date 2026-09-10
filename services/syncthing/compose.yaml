@@ -30,6 +30,11 @@ services:
       - "traefik.http.routers.sync-internal.rule=Host(`sync.internal.pippinn.me`)"
       - "traefik.http.services.sync.loadbalancer.server.port=8384"
       - "wud.tag.include=^v\\d+\\.\\d+\\.\\d+-ls\\d+$$"
+    deploy:
+      resources:
+        limits:
+          cpus: "1.0"
+          memory: 256M
 
 networks:
   traefik_internal:

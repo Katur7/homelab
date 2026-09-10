@@ -37,7 +37,7 @@ services:
       - SP_LISTENIP=0.0.0.0
       - SP_ALLOWFROM=0.0.0.0/0
       - SP_ALLOW_GET=(/v1\..{1,2})?/(version|containers/.*|networks|nodes|services|system/df|events.*|images/.*)
-      - SP_ALLOW_POST=(/v1\..{1,2})?/containers/(linguacafe-webserver|linguacafe-python-service|linguacafe-database)/(start|stop)
+      - SP_ALLOW_POST=(/v1\..{1,2})?/containers/(linguacafe-webserver|linguacafe-python-service|linguacafe-database|calibre-web|journiv-app|journiv-celery-worker|journiv-celery-beat|journiv-valkey)/(start|stop)
       - SP_ALLOW_HEAD=/_ping
     networks:
       - socket_proxy
@@ -47,6 +47,11 @@ services:
       - no-new-privileges:true
     user: "65534:992"
     restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: "0.1"
+          memory: 32M
 
   # ── Sablier ───────────────────────────────────────────────────────────────────
   # On-demand container scaling — stops idle services, restarts on first request
@@ -64,6 +69,11 @@ services:
     restart: unless-stopped
     labels:
       - "wud.tag.include=^v\\d+\\.\\d+\\.\\d+$$"
+    deploy:
+      resources:
+        limits:
+          cpus: "0.25"
+          memory: 128M
 
   # ── CrowdSec WAF ─────────────────────────────────────────────────────────────
   # Reads Traefik access logs and makes ban decisions via LAPI
@@ -87,11 +97,16 @@ services:
     restart: unless-stopped
     labels:
       - "wud.tag.include=^v\\d+\\.\\d+\\.\\d+$$"
+    deploy:
+      resources:
+        limits:
+          cpus: "0.5"
+          memory: 256M
 
   # ── Redis ─────────────────────────────────────────────────────────────────────
   # Session store for Authelia
   redis:
-    image: redis:8.6-alpine
+    image: redis:8.10-alpine
     container_name: redis
     command: redis-server --save 60 1 --loglevel warning --requirepass ${REDIS_PASSWORD}
     networks:
@@ -99,6 +114,11 @@ services:
     restart: unless-stopped
     labels:
       - "wud.tag.include=^[\\d.]+-alpine$$"
+    deploy:
+      resources:
+        limits:
+          cpus: "0.25"
+          memory: 64M
 
   # ── Authelia ──────────────────────────────────────────────────────────────────
   # SSO / OIDC provider for all protected services
@@ -124,6 +144,11 @@ services:
       - "traefik.http.routers.authelia.rule=Host(`auth.pippinn.me`)"
       - "wud.tag.include=^\\d+\\.\\d+$$"
       - "traefik.http.routers.authelia.entrypoints=websecure,tunnel"
+    deploy:
+      resources:
+        limits:
+          cpus: "0.5"
+          memory: 256M
 
   # ── Traefik Reverse Proxy ─────────────────────────────────────────────────────
   # Ingress for all services — depends on socket-proxy and crowdsec
@@ -166,3 +191,8 @@ services:
     extra_hosts:
       - host.docker.internal:172.17.0.1
     restart: always
+    deploy:
+      resources:
+        limits:
+          cpus: "1.0"
+          memory: 512M

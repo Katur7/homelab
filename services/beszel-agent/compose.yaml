@@ -16,3 +16,8 @@ services:
       KEY: ${BESZEL_AGENT_KEY_NAS}
       TOKEN: ${BESZEL_AGENT_TOKEN_NAS}
       HUB_URL: http://192.168.86.26:8090
+    deploy:
+      resources:
+        limits:
+          cpus: "0.1"
+          memory: 32M

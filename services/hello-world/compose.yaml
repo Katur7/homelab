@@ -13,6 +13,11 @@ services:
       - "traefik.enable=true"
       - "traefik.http.routers.hello.entrypoints=tunnel"
       - "traefik.http.routers.hello.rule=Host(`hello.pippinn.me`)"
+    deploy:
+      resources:
+        limits:
+          cpus: "0.1"
+          memory: 16M
 
 networks:
   traefik_internal:

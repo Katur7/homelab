@@ -1,5 +1,6 @@
 http:
   routers:
+    # ── LinguaCafe ────────────────────────────────────────────────────────────────
     linguacafe-internal:
       entryPoints:
         - websecure
@@ -8,11 +9,50 @@ http:
         - sablier-linguacafe
       service: linguacafe-internal
 
+    # ── Calibre-Web ───────────────────────────────────────────────────────────────
+    calibre-web-internal:
+      entryPoints:
+        - websecure
+      rule: "Host(`ebooks.internal.pippinn.me`)"
+      middlewares:
+        - sablier-calibre-web
+      service: calibre-web-internal
+
+    # ── Journiv ───────────────────────────────────────────────────────────────────
+    journiv-internal:
+      entryPoints:
+        - websecure
+      rule: "Host(`dagbok.pippinn.me`)"
+      middlewares:
+        - sablier-journiv
+      service: journiv-internal
+
+    journiv-tunnel:
+      entryPoints:
+        - tunnel
+      rule: "Host(`dagbok.pippinn.me`)"
+      middlewares:
+        - authelia-auth
+        - sablier-journiv
+      service: journiv-internal
+
   services:
     linguacafe-internal:
       loadBalancer:
         servers:
           - url: "http://linguacafe-webserver/"
+        passHostHeader: true
+
+    calibre-web-internal:
+      loadBalancer:
+        servers:
+          - url: "http://calibre-web:8083"
+        passHostHeader: true
+
+    journiv-internal:
+      loadBalancer:
+        servers:
+          - url: "http://journiv-app:8000"
         passHostHeader: true
 
   middlewares:
@@ -24,5 +64,27 @@ http:
           sessionDuration: 1h
           dynamic:
             displayName: LinguaCafe
+            showDetails: true
+            refreshFrequency: 5s
+
+    sablier-calibre-web:
+      plugin:
+        sablier:
+          names: calibre-web
+          sablierUrl: http://sablier:10000
+          sessionDuration: 1h
+          dynamic:
+            displayName: Calibre-Web
+            showDetails: true
+            refreshFrequency: 5s
+
+    sablier-journiv:
+      plugin:
+        sablier:
+          names: journiv-app,journiv-celery-worker,journiv-celery-beat,journiv-valkey
+          sablierUrl: http://sablier:10000
+          sessionDuration: 1h
+          dynamic:
+            displayName: Journiv
             showDetails: true
             refreshFrequency: 5s

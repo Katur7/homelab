@@ -66,9 +66,11 @@ x-celery-healthcheck: &celery-healthcheck
 
 services:
   valkey:
-    image: valkey/valkey:9.0-alpine
+    image: valkey/valkey:9.1-alpine
     container_name: journiv-valkey
     restart: unless-stopped
+    labels:
+      - "wud.tag.include=^\\d+\\.\\d+-alpine$$"
     volumes:
       - ./data/valkey:/data
     networks:
@@ -79,6 +81,11 @@ services:
       timeout: 5s
       retries: 5
       start_period: 10s
+    deploy:
+      resources:
+        limits:
+          cpus: "0.25"
+          memory: 64M
 
   celery-worker:
     <<: *celery-common
@@ -94,7 +101,11 @@ services:
       SERVICE_ROLE: celery-worker
       ENVIRONMENT: production
     healthcheck:
-      <<: *celery-healthcheck
+      test: ["CMD-SHELL", "kill -0 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 40s
 
   celery-beat:
     <<: *celery-common
@@ -133,17 +144,7 @@ services:
         reservations:
           memory: 512m
     labels:
-      - "traefik.enable=true"
-      - "traefik.docker.network=traefik_internal"
-
-      # Internal (LAN)
-      - "traefik.http.routers.dagbok-internal.entrypoints=websecure"
-      - "traefik.http.routers.dagbok-internal.rule=Host(`dagbok.pippinn.me`)"
-
-      # Tunnel (external, Authelia-protected)
-      - "traefik.http.routers.dagbok-tunnel.entrypoints=tunnel"
-      - "traefik.http.routers.dagbok-tunnel.rule=Host(`dagbok.pippinn.me`)"
-      - "traefik.http.routers.dagbok-tunnel.middlewares=authelia-auth@file"
+      - "traefik.enable=false"
 
   admin-cli:
     <<: *app-common
