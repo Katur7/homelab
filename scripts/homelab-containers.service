@@ -1,0 +1,28 @@
+# homelab-containers.service — Cleanly manage container lifecycle around Docker
+# daemon restarts to prevent containerd stale-task exit-128 errors.
+#
+# Install:
+#   sudo cp /home/grimur/homelab/scripts/homelab-containers.service /etc/systemd/system/
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable homelab-containers.service
+#
+# The unit does NOT need to be "started" manually — it activates automatically
+# when docker.service starts, and its ExecStop runs before Docker shuts down.
+
+[Unit]
+Description=Homelab Docker Compose stacks
+After=docker.service
+Requires=docker.service
+PartOf=docker.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+WorkingDirectory=/home/grimur/homelab
+ExecStart=/home/grimur/homelab/scripts/homelab-up.sh
+ExecStop=/home/grimur/homelab/scripts/homelab-down.sh
+TimeoutStartSec=300
+TimeoutStopSec=180
+
+[Install]
+WantedBy=multi-user.target
