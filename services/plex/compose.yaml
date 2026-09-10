@@ -2,7 +2,7 @@ name: plex
 
 services:
   plex:
-    image: ghcr.io/linuxserver/plex:1.43.3.10896-cb3ebc72d-ls322
+    image: ghcr.io/linuxserver/plex:1.43.3.10896-cb3ebc72d-ls323
     container_name: plex
     restart: unless-stopped
     networks:
@@ -28,6 +28,11 @@ services:
       - "traefik.http.routers.plex-internal.rule=Host(`plex.internal.pippinn.me`)"
       - "traefik.http.services.plex.loadbalancer.server.port=32400"
       - "traefik.docker.network=traefik_internal"
+    deploy:
+      resources:
+        limits:
+          cpus: "1.5"
+          memory: 512M
 
 networks:
   traefik_internal:
