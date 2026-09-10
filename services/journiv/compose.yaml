@@ -139,17 +139,7 @@ services:
         reservations:
           memory: 512m
     labels:
-      - "traefik.enable=true"
-      - "traefik.docker.network=traefik_internal"
-
-      # Internal (LAN)
-      - "traefik.http.routers.dagbok-internal.entrypoints=websecure"
-      - "traefik.http.routers.dagbok-internal.rule=Host(`dagbok.pippinn.me`)"
-
-      # Tunnel (external, Authelia-protected)
-      - "traefik.http.routers.dagbok-tunnel.entrypoints=tunnel"
-      - "traefik.http.routers.dagbok-tunnel.rule=Host(`dagbok.pippinn.me`)"
-      - "traefik.http.routers.dagbok-tunnel.middlewares=authelia-auth@file"
+      - "traefik.enable=false"
 
   admin-cli:
     <<: *app-common

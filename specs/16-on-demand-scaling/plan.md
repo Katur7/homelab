@@ -24,3 +24,38 @@ Sablier uses `docker start` directly — compose `depends_on` is ignored. Webser
 
 ## Rollback
 Reverse the four file changes and recreate both stacks. No secrets or volumes involved.
+
+---
+
+# Extension: Calibre-Web + Journiv
+
+## Goal
+Apply the same on-demand scaling pattern to two more rarely-used services.
+
+## Services Added
+
+### Calibre-Web (1 container)
+| Item | Value |
+|---|---|
+| Container | `calibre-web` |
+| Route | `ebooks.internal.pippinn.me` (websecure) |
+| Idle timeout | 1h |
+| Notes | Add healthcheck (port 8083). Single container — simplest case. |
+
+### Journiv (4 containers)
+| Item | Value |
+|---|---|
+| Containers | `journiv-app`, `journiv-celery-worker`, `journiv-celery-beat`, `journiv-valkey` |
+| Internal route | `dagbok.pippinn.me` (websecure) |
+| Tunnel route | `dagbok.pippinn.me` (tunnel, authelia-auth first then sablier) |
+| Idle timeout | 1h |
+| Notes | Auth middleware before Sablier on tunnel — prevents unauthenticated wake triggers. |
+
+## Files Changed
+1. `infrastructure/gateway/compose.yaml` — expand `SP_ALLOW_POST` regex with 5 new container names
+2. `infrastructure/gateway/config/dynamic/sablier.yml` — add routers/services/middlewares for both services
+3. `services/calibre-web/compose.yaml` — remove Traefik labels, add healthcheck
+4. `services/journiv/compose.yaml` — remove Traefik labels from `journiv-app`
+
+## Rollback
+Revert the four files and recreate gateway + both service stacks.

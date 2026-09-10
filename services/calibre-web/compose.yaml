@@ -13,12 +13,15 @@ services:
     volumes:
       - ./config:/config
       - /srv/dev-disk-by-uuid-f1209e02-5b26-491f-ac40-f951e9ddfbb0/books/ebooks:/ebooks:ro
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8083"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 30s
     labels:
+      - "traefik.enable=false"
       - "wud.autoupdate=true"
-      - "traefik.enable=true"
-      - "traefik.http.routers.calibre-web.entrypoints=websecure"
-      - "traefik.http.routers.calibre-web.rule=Host(`ebooks.internal.pippinn.me`)"
-      - "traefik.docker.network=traefik_internal"
       - "wud.tag.include=^\\d+\\.\\d+\\.\\d+-ls\\d+$$"
 
 networks:
