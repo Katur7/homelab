@@ -2,13 +2,6 @@ homeassistant:
   packages: !include_dir_named packages/
   setup_timeout: 600
 
-# Reverse proxy
-http:
-  use_x_forwarded_for: true
-  trusted_proxies:
-    - 172.26.0.0/16  # traefik_internal subnet
-    - 172.24.0.0/16  
-
 # Loads default set of integrations. Do not remove.
 default_config:
 
