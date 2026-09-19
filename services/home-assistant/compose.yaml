@@ -2,7 +2,7 @@ name: home-assistant
 
 services:
   homeassistant:
-    image: ghcr.io/home-assistant/home-assistant:2026.9.1
+    image: ghcr.io/home-assistant/home-assistant:2026.9.3
     container_name: homeassistant
     restart: unless-stopped
     network_mode: host
@@ -34,6 +34,7 @@ services:
         limits:
           cpus: "1.5"
           memory: 2048M
+
   matter-server:
     image: ghcr.io/home-assistant-libs/python-matter-server:8.1.0
     container_name: matter-server
@@ -43,6 +44,33 @@ services:
       - ./matter-server:/data
     labels:
       - "wud.tag.include=^\\d+\\.\\d+\\.\\d+$$"
+    deploy:
+      resources:
+        limits:
+          cpus: "0.5"
+          memory: 256M
+
+  music-assistant-server:
+    image: ghcr.io/music-assistant/server:2
+    container_name: music-assistant-server
+    # Network mode must be set to host for MA to discover and stream to players
+    network_mode: host
+    volumes:
+      - ./music-assistant-server/data:/data/
+    env_file:
+      - ../../global.env
+    labels:
+      - "traefik.enable=true"
+      # host.docker.internal required because MA uses network_mode:host — Traefik cannot
+      # auto-discover the container IP on traefik_internal. host.docker.internal resolves
+      # to 172.17.0.1 (docker bridge / host) via extra_hosts in the gateway compose.
+      - "traefik.http.services.music-assistant.loadbalancer.server.url=http://host.docker.internal:8095"
+      - "wud.tag.include=^\\d\\.\\d+\\.\\d+$$"
+
+      # Internal (LAN only — global internal-only middleware applies)
+      - "traefik.http.routers.music-assistant-internal.entrypoints=websecure"
+      - "traefik.http.routers.music-assistant-internal.rule=Host(`music-assistant.internal.pippinn.me`)"
+    restart: unless-stopped
     deploy:
       resources:
         limits:
