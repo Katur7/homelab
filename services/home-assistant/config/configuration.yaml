@@ -1,6 +1,5 @@
 homeassistant:
   packages: !include_dir_named packages/
-  setup_timeout: 600
 
 # Loads default set of integrations. Do not remove.
 default_config:
