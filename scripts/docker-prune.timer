@@ -1,0 +1,20 @@
+# docker-prune.timer — Schedule weekly execution of docker-prune.service
+#
+# Install:
+#   sudo cp /home/grimur/homelab/scripts/docker-prune.service /etc/systemd/system/
+#   sudo cp /home/grimur/homelab/scripts/docker-prune.timer /etc/systemd/system/
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable --now docker-prune.timer
+#
+
+[Unit]
+Description=Weekly Docker Prune Timer
+
+[Timer]
+OnCalendar=Sun *-*-* 03:30:00
+Persistent=true
+RandomizedDelaySec=1800
+
+[Install]
+WantedBy=timers.target
+

@@ -1,0 +1,19 @@
+# docker-prune.service — Periodically prune old/superseded Docker images and build caches
+#
+# Install:
+#   sudo cp /home/grimur/homelab/scripts/docker-prune.service /etc/systemd/system/
+#   sudo cp /home/grimur/homelab/scripts/docker-prune.timer /etc/systemd/system/
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable --now docker-prune.timer
+#
+
+[Unit]
+Description=Prune unused Docker images and build cache
+After=docker.service
+Requires=docker.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/docker image prune -af --filter "until=168h"
+ExecStartPost=/usr/bin/docker builder prune -af --filter "until=168h"
+
