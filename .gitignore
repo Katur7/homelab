@@ -9,6 +9,8 @@
 # Docker Data
 volumes/
 
+.gstack/
+
 # Service state (runtime data, gitignored — covered by BorgBackup)
 /services/mealie/data/
 /services/calibre-web/config/
