@@ -17,8 +17,13 @@ To query current state: `docker exec uptime-kuma sqlite3 /app/data/kuma.db "SELE
 | Name | Type | URL | Interval |
 |------|------|-----|----------|
 | Hello - Cloudflare tunnel | HTTP | `https://hello.pippinn.me` | 300s |
+| Backup - Local photos | Push | *(secret)* | 93600s (26h) |
+| Backup - Local homelab | Push | *(secret)* | 93600s (26h) |
+| Backup - Offsite (pi-backup) | Push | *(secret)* | 691200s (8 days) |
+| WireGuard (Container) | Push | *(secret)* | 360s (6m) |
 
 Monitors the Cloudflare tunnel and Traefik routing on the NAS from the Pi's perspective.
+Push monitors receive a heartbeat ping from automated host scripts when services/jobs are healthy.
 
 ## Rebuild Steps
 
