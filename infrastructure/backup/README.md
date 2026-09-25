@@ -29,6 +29,7 @@ Both repos use `repokey-blake2` encryption. Passphrase in `/root/.borg-passphras
 | File | Purpose |
 |------|---------|
 | `backup-to-pi.sh` | Offsite push script — create, prune, compact |
+| `borg-post-backup.sh` | Post-backup hook for OMV Borg plugin — pings Uptime Kuma |
 | `borg-exclude-homelab.txt` | Exclusion patterns for the homelab archive |
 
 ## Host-managed files (not in git)
@@ -38,6 +39,8 @@ Both repos use `repokey-blake2` encryption. Passphrase in `/root/.borg-passphras
 | `/root/.borg-passphrase` | NAS | Borg encryption passphrase |
 | `/root/.ssh/id_ed25519_backup_pi` | NAS | SSH key for borg user on pi-backup |
 | `/root/.uptime-kuma-push-offsite` | NAS | Uptime Kuma push heartbeat URL for offsite backup |
+| `/root/.uptime-kuma-push-local-homelab` | NAS | Uptime Kuma push heartbeat URL for local homelab backup |
+| `/root/.uptime-kuma-push-local-photos` | NAS | Uptime Kuma push heartbeat URL for local photos backup |
 | `/etc/cron.d/backup-to-pi` | NAS | Weekly cron schedule |
 | `/home/borg/.ssh/authorized_keys` | pi-backup | Forced `borg serve` — restricts to repo path |
 
