@@ -1,6 +1,6 @@
 # Package: Medication Reminder
-# All helpers, scripts, and automations for daily morning & evening medication tracking.
-# See: services/home-assistant/specs/01-medication-reminder/plan.md
+# Consolidated morning & evening medication tracking with shared NFC tag.
+# See: services/home-assistant/specs/05-evening-medication-reminder/plan.md
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -61,55 +61,98 @@ template:
 # ---------------------------------------------------------------------------
 
 script:
-  medication_morning_mark_taken:
-    alias: "Medication (Morning): Mark Taken"
+  # Mark taken for given period (morning | evening)
+  medication_mark_taken:
+    alias: "Medication: Mark Taken"
+    fields:
+      period:
+        description: "morning or evening"
+        default: "morning"
     sequence:
       - action: input_datetime.set_datetime
         target:
-          entity_id: input_datetime.medication_morning_last_taken
+          entity_id: "input_datetime.medication_{{ period }}_last_taken"
         data:
           datetime: "{{ now().strftime('%Y-%m-%d %H:%M:%S') }}"
       - action: timer.cancel
         target:
-          entity_id: timer.medication_morning_snooze
-      - action: timer.cancel
-        target:
-          entity_id: timer.medication_morning_notification_timeout
-      - action: input_boolean.turn_off
-        target:
-          entity_id: input_boolean.medication_morning_waiting_for_home
+          entity_id:
+            - "timer.medication_{{ period }}_snooze"
+            - "timer.medication_{{ period }}_notification_timeout"
+      - if:
+          - condition: template
+            value_template: "{{ period == 'morning' }}"
+        then:
+          - action: input_boolean.turn_off
+            target:
+              entity_id: input_boolean.medication_morning_waiting_for_home
       - action: input_boolean.turn_on
         target:
-          entity_id: input_boolean.medication_morning_notified_today
+          entity_id: "input_boolean.medication_{{ period }}_notified_today"
       - action: !secret phone_notify_service
         data:
           message: clear_notification
           data:
-            tag: medication_morning_reminder
+            tag: "medication_{{ period }}_reminder"
 
-  medication_evening_mark_taken:
-    alias: "Medication (Evening): Mark Taken"
+  # Parameterised reminder sender
+  medication_send_reminder:
+    alias: "Medication: Send Reminder"
+    fields:
+      period:
+        description: "morning or evening"
+        default: "morning"
+      message:
+        description: "Notification body text"
+      include_home_action:
+        description: "Include the Remind me when home button"
+        default: true
+      final_reminder:
+        description: "Final reminder — only show taken button"
+        default: false
     sequence:
-      - action: input_datetime.set_datetime
-        target:
-          entity_id: input_datetime.medication_evening_last_taken
+      - action: logbook.log
         data:
-          datetime: "{{ now().strftime('%Y-%m-%d %H:%M:%S') }}"
-      - action: timer.cancel
-        target:
-          entity_id: timer.medication_evening_snooze
-      - action: timer.cancel
-        target:
-          entity_id: timer.medication_evening_notification_timeout
+          name: "Medication {{ period | capitalize }}"
+          message: "{{ period }} send_reminder called — message: {{ message }}"
+          entity_id: "input_boolean.medication_{{ period }}_notified_today"
       - action: input_boolean.turn_on
         target:
-          entity_id: input_boolean.medication_evening_notified_today
+          entity_id: "input_boolean.medication_{{ period }}_notified_today"
+      # Start 1-hour timeout unless this is the final reminder
+      - if:
+          - condition: template
+            value_template: "{{ not final_reminder }}"
+        then:
+          - action: timer.start
+            target:
+              entity_id: "timer.medication_{{ period }}_notification_timeout"
+            data:
+              duration: "01:00:00"
       - action: !secret phone_notify_service
         data:
-          message: clear_notification
+          title: "{{ period | capitalize }} Medication Reminder"
+          message: "{{ message | default('Have you taken your ' ~ period ~ ' medication?') }}"
           data:
-            tag: medication_evening_reminder
+            tag: "medication_{{ period }}_reminder"
+            actions: >
+              {% set p = period | upper %}
+              {% if final_reminder %}
+                {{ [{'action': 'MEDICATION_' ~ p ~ '_TAKEN', 'title': 'Taken'}] }}
+              {% elif period == 'morning' and include_home_action %}
+                {{ [
+                  {'action': 'MEDICATION_' ~ p ~ '_TAKEN', 'title': 'Taken'},
+                  {'action': 'MEDICATION_' ~ p ~ '_SNOOZE_30', 'title': 'Snooze 30m'},
+                  {'action': 'MEDICATION_MORNING_REMIND_HOME', 'title': 'When home'}
+                ] }}
+              {% else %}
+                {{ [
+                  {'action': 'MEDICATION_' ~ p ~ '_TAKEN', 'title': 'Taken'},
+                  {'action': 'MEDICATION_' ~ p ~ '_SNOOZE_30', 'title': 'Snooze 30m'}
+                ] }}
+              {% endif %}
 
+  # Reset all helpers to epoch 2000-01-01 for test suite
   medication_reset_test_state:
     alias: "Medication: Reset Test State"
     sequence:
@@ -134,191 +177,12 @@ script:
             - timer.medication_evening_snooze
             - timer.medication_evening_notification_timeout
 
-  medication_morning_send_reminder:
-    alias: "Medication (Morning): Send Reminder"
-    fields:
-      message:
-        description: "Notification body text"
-        default: "Have you taken your morning medication today?"
-      include_home_action:
-        description: "Include the Remind me when home button"
-        default: true
-      final_reminder:
-        description: "Final reminder — only show taken button, do not start timeout timer"
-        default: false
-    sequence:
-      - action: logbook.log
-        data:
-          name: "Medication Morning"
-          message: >
-            morning send_reminder called — message: {{ message }}
-          entity_id: input_boolean.medication_morning_notified_today
-      - action: input_boolean.turn_on
-        target:
-          entity_id: input_boolean.medication_morning_notified_today
-      # Start 1-hour timeout unless this is the final (17:00) reminder
-      - choose:
-          - conditions:
-              - condition: template
-                value_template: "{{ not final_reminder }}"
-            sequence:
-              - action: timer.start
-                target:
-                  entity_id: timer.medication_morning_notification_timeout
-                data:
-                  duration: "01:00:00"
-      # Notification — action buttons vary by final_reminder / include_home_action
-      - choose:
-          # Hard stop: taken button only
-          - conditions:
-              - condition: template
-                value_template: "{{ final_reminder }}"
-            sequence:
-              - action: !secret phone_notify_service
-                data:
-                  title: "Morning Medication Reminder"
-                  message: "{{ message }}"
-                  data:
-                    tag: medication_morning_reminder
-                    actions:
-                      - action: MEDICATION_MORNING_TAKEN
-                        title: "Taken"
-          # Home not applicable: taken + snooze
-          - conditions:
-              - condition: template
-                value_template: "{{ not final_reminder and not include_home_action }}"
-            sequence:
-              - action: !secret phone_notify_service
-                data:
-                  title: "Morning Medication Reminder"
-                  message: "{{ message }}"
-                  data:
-                    tag: medication_morning_reminder
-                    actions:
-                      - action: MEDICATION_MORNING_TAKEN
-                        title: "Taken"
-                      - action: MEDICATION_MORNING_SNOOZE_30
-                        title: "Snooze 30m"
-          # Full set: taken + snooze + remind when home
-          - conditions:
-              - condition: template
-                value_template: "{{ not final_reminder and include_home_action }}"
-            sequence:
-              - action: !secret phone_notify_service
-                data:
-                  title: "Morning Medication Reminder"
-                  message: "{{ message }}"
-                  data:
-                    tag: medication_morning_reminder
-                    actions:
-                      - action: MEDICATION_MORNING_TAKEN
-                        title: "Taken"
-                      - action: MEDICATION_MORNING_SNOOZE_30
-                        title: "Snooze 30m"
-                      - action: MEDICATION_MORNING_REMIND_HOME
-                        title: "When home"
-
-  medication_evening_send_reminder:
-    alias: "Medication (Evening): Send Reminder"
-    fields:
-      message:
-        description: "Notification body text"
-        default: "Have you taken your evening medication?"
-      final_reminder:
-        description: "Final reminder — only show taken button, do not start timeout timer"
-        default: false
-    sequence:
-      - action: logbook.log
-        data:
-          name: "Medication Evening"
-          message: >
-            evening send_reminder called — message: {{ message }}
-          entity_id: input_boolean.medication_evening_notified_today
-      - action: input_boolean.turn_on
-        target:
-          entity_id: input_boolean.medication_evening_notified_today
-      # Start 1-hour timeout unless this is the final (23:30) reminder
-      - choose:
-          - conditions:
-              - condition: template
-                value_template: "{{ not final_reminder }}"
-            sequence:
-              - action: timer.start
-                target:
-                  entity_id: timer.medication_evening_notification_timeout
-                data:
-                  duration: "01:00:00"
-      # Notification — action buttons vary by final_reminder
-      - choose:
-          # Hard stop: taken button only
-          - conditions:
-              - condition: template
-                value_template: "{{ final_reminder }}"
-            sequence:
-              - action: !secret phone_notify_service
-                data:
-                  title: "Evening Medication Reminder"
-                  message: "{{ message }}"
-                  data:
-                    tag: medication_evening_reminder
-                    actions:
-                      - action: MEDICATION_EVENING_TAKEN
-                        title: "Taken"
-          # Normal reminder: taken + snooze
-          - conditions:
-              - condition: template
-                value_template: "{{ not final_reminder }}"
-            sequence:
-              - action: !secret phone_notify_service
-                data:
-                  title: "Evening Medication Reminder"
-                  message: "{{ message }}"
-                  data:
-                    tag: medication_evening_reminder
-                    actions:
-                      - action: MEDICATION_EVENING_TAKEN
-                        title: "Taken"
-                      - action: MEDICATION_EVENING_SNOOZE_30
-                        title: "Snooze 30m"
-
 # ---------------------------------------------------------------------------
 # Automations
 # ---------------------------------------------------------------------------
 
 automation:
-  # =========================================================================
-  # Shared NFC Scan
-  # =========================================================================
-  # NFC scan: mark as taken — filtered to registered phone only
-  # Before 20:00: marks morning medication taken
-  # At/after 20:00: marks evening medication taken
-  - id: medication_nfc_scanned
-    alias: medication_nfc_scanned
-    variables:
-      allowed_device_id: !secret phone_device_id
-    triggers:
-      - trigger: event
-        event_type: tag_scanned
-        event_data:
-          tag_id: !secret medication_nfc_tag_id
-    conditions:
-      - condition: template
-        value_template: "{{ trigger.event.data.device_id == allowed_device_id }}"
-    actions:
-      - choose:
-          - conditions:
-              - condition: time
-                before: "20:00:00"
-            sequence:
-              - action: script.medication_morning_mark_taken
-        default:
-          - action: script.medication_evening_mark_taken
-
-  # =========================================================================
-  # Morning Automations
-  # =========================================================================
-
-  # 1. Off-charger in morning window: start 30-min snooze timer
+  # 1. Off-charger morning window: start 30-min snooze timer
   - id: medication_morning_off_charger
     alias: medication_morning_off_charger
     triggers:
@@ -336,120 +200,133 @@ automation:
         entity_id: timer.medication_morning_snooze
         state: idle
     actions:
-      - action: logbook.log
-        data:
-          name: "Medication Morning"
-          message: >
-            off-charger detected — starting 30-min snooze timer
-          entity_id: timer.medication_morning_snooze
       - action: timer.start
         target:
           entity_id: timer.medication_morning_snooze
         data:
           duration: "00:30:00"
 
-  # 2. Morning snooze timer done: send reminder
-  - id: medication_morning_timer_done
-    alias: medication_morning_timer_done
+  # 2. Snooze timer done: send reminder for active period
+  - id: medication_timer_done
+    alias: medication_timer_done
+    variables:
+      period: "{{ 'morning' if 'morning' in trigger.event.data.entity_id else 'evening' }}"
     triggers:
       - trigger: event
         event_type: timer.finished
         event_data:
           entity_id: timer.medication_morning_snooze
+      - trigger: event
+        event_type: timer.finished
+        event_data:
+          entity_id: timer.medication_evening_snooze
     conditions:
       - condition: template
         value_template: >
-          {{ states('input_datetime.medication_morning_last_taken')[:10] != now().strftime('%Y-%m-%d') }}
+          {{ states('input_datetime.medication_' ~ period ~ '_last_taken')[:10] != now().strftime('%Y-%m-%d') }}
     actions:
-      - action: logbook.log
+      - action: script.medication_send_reminder
         data:
-          name: "Medication Morning"
-          message: >
-            morning snooze timer finished — sending reminder
-          entity_id: timer.medication_morning_snooze
-      - action: script.medication_morning_send_reminder
-        data:
-          message: "Have you taken your morning medication today?"
+          period: "{{ period }}"
+          message: "Have you taken your {{ period }} medication?"
 
-  # 3. 10:00 hard cron — only fires if not yet notified and timer is idle
-  - id: medication_morning_10am
-    alias: medication_morning_10am
+  # 3. Scheduled cron reminders (10:00 morning, 22:00 evening)
+  - id: medication_scheduled_reminder
+    alias: medication_scheduled_reminder
     triggers:
       - trigger: time
         at: "10:00:00"
+        id: morning
+      - trigger: time
+        at: "22:00:00"
+        id: evening
     conditions:
       - condition: template
         value_template: >
-          {{ states('input_datetime.medication_morning_last_taken')[:10] != now().strftime('%Y-%m-%d') }}
-      - condition: state
-        entity_id: input_boolean.medication_morning_notified_today
-        state: "off"
-      - condition: state
-        entity_id: timer.medication_morning_snooze
-        state: idle
+          {{ states('input_datetime.medication_' ~ trigger.id ~ '_last_taken')[:10] != now().strftime('%Y-%m-%d') }}
+      - condition: template
+        value_template: >
+          {{ trigger.id == 'evening' or (
+             states('input_boolean.medication_morning_notified_today') == 'off' and
+             states('timer.medication_morning_snooze') == 'idle') }}
     actions:
-      - action: script.medication_morning_send_reminder
+      - action: script.medication_send_reminder
         data:
-          message: "Don't forget your morning medication!"
+          period: "{{ trigger.id }}"
+          message: >
+            {{ "Don't forget your morning medication!" if trigger.id == 'morning' else "Have you taken your evening medication?" }}
 
-  # 4. Morning Notification action: taken (supports MEDICATION_MORNING_TAKEN and legacy MEDICATION_TAKEN)
-  - id: medication_morning_action_taken
-    alias: medication_morning_action_taken
+  # 4. NFC scan: route to morning (<20:00) or evening (>=20:00)
+  - id: medication_nfc_scanned
+    alias: medication_nfc_scanned
+    variables:
+      allowed_device_id: !secret phone_device_id
     triggers:
       - trigger: event
-        event_type: mobile_app_notification_action
+        event_type: tag_scanned
         event_data:
-          action: MEDICATION_MORNING_TAKEN
-      - trigger: event
-        event_type: mobile_app_notification_action
-        event_data:
-          action: MEDICATION_TAKEN
-    conditions: []
+          tag_id: !secret medication_nfc_tag_id
+    conditions:
+      - condition: template
+        value_template: "{{ trigger.event.data.device_id == allowed_device_id }}"
     actions:
-      - action: script.medication_morning_mark_taken
+      - action: script.medication_mark_taken
+        data:
+          period: "{{ 'morning' if now().hour < 20 else 'evening' }}"
 
-  # 5. Morning Notification action: snooze 30 min (supports MEDICATION_MORNING_SNOOZE_30 and legacy MEDICATION_SNOOZE_30)
-  - id: medication_morning_action_snooze
-    alias: medication_morning_action_snooze
+  # 5. Notification action: Taken
+  - id: medication_action_taken
+    alias: medication_action_taken
     triggers:
       - trigger: event
         event_type: mobile_app_notification_action
-        event_data:
-          action: MEDICATION_MORNING_SNOOZE_30
-      - trigger: event
-        event_type: mobile_app_notification_action
-        event_data:
-          action: MEDICATION_SNOOZE_30
     conditions:
       - condition: template
         value_template: >
-          {{ states('input_datetime.medication_morning_last_taken')[:10] != now().strftime('%Y-%m-%d') }}
+          {{ trigger.event.data.action in ['MEDICATION_TAKEN', 'MEDICATION_MORNING_TAKEN', 'MEDICATION_EVENING_TAKEN'] }}
+    actions:
+      - action: script.medication_mark_taken
+        data:
+          period: "{{ 'evening' if 'EVENING' in trigger.event.data.action else 'morning' }}"
+
+  # 6. Notification action: Snooze 30 min
+  - id: medication_action_snooze
+    alias: medication_action_snooze
+    variables:
+      period: "{{ 'evening' if 'EVENING' in trigger.event.data.action else 'morning' }}"
+    triggers:
+      - trigger: event
+        event_type: mobile_app_notification_action
+    conditions:
+      - condition: template
+        value_template: >
+          {{ trigger.event.data.action in ['MEDICATION_SNOOZE_30', 'MEDICATION_MORNING_SNOOZE_30', 'MEDICATION_EVENING_SNOOZE_30'] }}
+      - condition: template
+        value_template: >
+          {{ states('input_datetime.medication_' ~ period ~ '_last_taken')[:10] != now().strftime('%Y-%m-%d') }}
     actions:
       - action: timer.cancel
         target:
-          entity_id: timer.medication_morning_notification_timeout
+          entity_id: "timer.medication_{{ period }}_notification_timeout"
       - action: timer.cancel
         target:
-          entity_id: timer.medication_morning_snooze
+          entity_id: "timer.medication_{{ period }}_snooze"
       - action: timer.start
         target:
-          entity_id: timer.medication_morning_snooze
+          entity_id: "timer.medication_{{ period }}_snooze"
         data:
           duration: "00:30:00"
 
-  # 6. Morning Notification action: remind when home
+  # 7. Notification action: Remind when home (morning only)
   - id: medication_morning_action_home
     alias: medication_morning_action_home
     triggers:
       - trigger: event
         event_type: mobile_app_notification_action
-        event_data:
-          action: MEDICATION_MORNING_REMIND_HOME
-      - trigger: event
-        event_type: mobile_app_notification_action
-        event_data:
-          action: MEDICATION_REMIND_HOME
     conditions:
+      - condition: template
+        value_template: >
+          {{ trigger.event.data.action in ['MEDICATION_REMIND_HOME', 'MEDICATION_MORNING_REMIND_HOME'] }}
       - condition: template
         value_template: >
           {{ states('input_datetime.medication_morning_last_taken')[:10] != now().strftime('%Y-%m-%d') }}
@@ -460,22 +337,23 @@ automation:
       - action: input_boolean.turn_on
         target:
           entity_id: input_boolean.medication_morning_waiting_for_home
-      # If already home, send immediately and clear the waiting flag
+      # If already home, send immediately and clear waiting flag
       - choose:
           - conditions:
               - condition: state
                 entity_id: binary_sensor.phone_at_home
                 state: "on"
             sequence:
-              - action: script.medication_morning_send_reminder
+              - action: script.medication_send_reminder
                 data:
+                  period: morning
                   message: "You're already home — have you taken your morning medication?"
                   include_home_action: false
               - action: input_boolean.turn_off
                 target:
                   entity_id: input_boolean.medication_morning_waiting_for_home
 
-  # 7. Morning: Arrived home while waiting
+  # 8. Arrived home while waiting (morning only)
   - id: medication_morning_arrived_home
     alias: medication_morning_arrived_home
     triggers:
@@ -492,186 +370,59 @@ automation:
         value_template: >
           {{ states('input_datetime.medication_morning_last_taken')[:10] != now().strftime('%Y-%m-%d') }}
     actions:
-      - action: script.medication_morning_send_reminder
+      - action: script.medication_send_reminder
         data:
+          period: morning
           message: "Welcome home! Have you taken your morning medication?"
           include_home_action: false
       - action: input_boolean.turn_off
         target:
           entity_id: input_boolean.medication_morning_waiting_for_home
 
-  # 8. 17:00 Morning hard stop — cancels all morning timers, final single-button notification
-  - id: medication_morning_17_fallback
-    alias: medication_morning_17_fallback
+  # 9. Hard fallbacks (17:00 morning, 23:30 evening)
+  - id: medication_hard_fallback
+    alias: medication_hard_fallback
     triggers:
       - trigger: time
         at: "17:00:00"
-    conditions:
-      - condition: template
-        value_template: >
-          {{ states('input_datetime.medication_morning_last_taken')[:10] != now().strftime('%Y-%m-%d') }}
-    actions:
-      - action: timer.cancel
-        target:
-          entity_id: timer.medication_morning_snooze
-      - action: timer.cancel
-        target:
-          entity_id: timer.medication_morning_notification_timeout
-      - action: input_boolean.turn_off
-        target:
-          entity_id: input_boolean.medication_morning_waiting_for_home
-      - action: script.medication_morning_send_reminder
-        data:
-          message: "Last reminder for today — have you taken your morning medication?"
-          include_home_action: false
-          final_reminder: true
-
-  # 9. Morning Notification timeout: re-notify hourly if dismissed (loops until 17:00 or action taken)
-  - id: medication_morning_notification_timeout
-    alias: medication_morning_notification_timeout
-    triggers:
-      - trigger: event
-        event_type: timer.finished
-        event_data:
-          entity_id: timer.medication_morning_notification_timeout
-    conditions:
-      - condition: template
-        value_template: >
-          {{ states('input_datetime.medication_morning_last_taken')[:10] != now().strftime('%Y-%m-%d') }}
-      - condition: time
-        before: "17:00:00"
-    actions:
-      - action: script.medication_morning_send_reminder
-        data:
-          message: "Reminder: have you taken your morning medication?"
-
-  # 10. Morning Startup check — catches HA being down at 10:00
-  - id: medication_morning_startup_check
-    alias: medication_morning_startup_check
-    triggers:
-      - trigger: homeassistant
-        event: start
-    conditions:
-      - condition: time
-        after: "10:00:00"
-        before: "17:00:00"
-      - condition: template
-        value_template: >
-          {{ states('input_datetime.medication_morning_last_taken')[:10] != now().strftime('%Y-%m-%d') }}
-      - condition: state
-        entity_id: input_boolean.medication_morning_notified_today
-        state: "off"
-    actions:
-      - action: script.medication_morning_send_reminder
-        data:
-          message: "Don't forget your morning medication!"
-          include_home_action: false
-
-  # =========================================================================
-  # Evening Automations
-  # =========================================================================
-
-  # 11. 22:00 Evening trigger — sends initial evening reminder if not yet taken
-  - id: medication_evening_22pm
-    alias: medication_evening_22pm
-    triggers:
-      - trigger: time
-        at: "22:00:00"
-    conditions:
-      - condition: template
-        value_template: >
-          {{ states('input_datetime.medication_evening_last_taken')[:10] != now().strftime('%Y-%m-%d') }}
-    actions:
-      - action: script.medication_evening_send_reminder
-        data:
-          message: "Have you taken your evening medication?"
-
-  # 12. Evening snooze timer done: send reminder
-  - id: medication_evening_timer_done
-    alias: medication_evening_timer_done
-    triggers:
-      - trigger: event
-        event_type: timer.finished
-        event_data:
-          entity_id: timer.medication_evening_snooze
-    conditions:
-      - condition: template
-        value_template: >
-          {{ states('input_datetime.medication_evening_last_taken')[:10] != now().strftime('%Y-%m-%d') }}
-    actions:
-      - action: logbook.log
-        data:
-          name: "Medication Evening"
-          message: >
-            evening snooze timer finished — sending reminder
-          entity_id: timer.medication_evening_snooze
-      - action: script.medication_evening_send_reminder
-        data:
-          message: "Have you taken your evening medication?"
-
-  # 13. Evening Notification action: taken
-  - id: medication_evening_action_taken
-    alias: medication_evening_action_taken
-    triggers:
-      - trigger: event
-        event_type: mobile_app_notification_action
-        event_data:
-          action: MEDICATION_EVENING_TAKEN
-    conditions: []
-    actions:
-      - action: script.medication_evening_mark_taken
-
-  # 14. Evening Notification action: snooze 30 min
-  - id: medication_evening_action_snooze
-    alias: medication_evening_action_snooze
-    triggers:
-      - trigger: event
-        event_type: mobile_app_notification_action
-        event_data:
-          action: MEDICATION_EVENING_SNOOZE_30
-    conditions:
-      - condition: template
-        value_template: >
-          {{ states('input_datetime.medication_evening_last_taken')[:10] != now().strftime('%Y-%m-%d') }}
-    actions:
-      - action: timer.cancel
-        target:
-          entity_id: timer.medication_evening_notification_timeout
-      - action: timer.cancel
-        target:
-          entity_id: timer.medication_evening_snooze
-      - action: timer.start
-        target:
-          entity_id: timer.medication_evening_snooze
-        data:
-          duration: "00:30:00"
-
-  # 15. 23:30 Evening hard stop — cancels evening timers, final single-button notification
-  - id: medication_evening_2330_fallback
-    alias: medication_evening_2330_fallback
-    triggers:
+        id: morning
       - trigger: time
         at: "23:30:00"
+        id: evening
     conditions:
       - condition: template
         value_template: >
-          {{ states('input_datetime.medication_evening_last_taken')[:10] != now().strftime('%Y-%m-%d') }}
+          {{ states('input_datetime.medication_' ~ trigger.id ~ '_last_taken')[:10] != now().strftime('%Y-%m-%d') }}
     actions:
       - action: timer.cancel
         target:
-          entity_id: timer.medication_evening_snooze
-      - action: timer.cancel
-        target:
-          entity_id: timer.medication_evening_notification_timeout
-      - action: script.medication_evening_send_reminder
+          entity_id:
+            - "timer.medication_{{ trigger.id }}_snooze"
+            - "timer.medication_{{ trigger.id }}_notification_timeout"
+      - if:
+          - condition: template
+            value_template: "{{ trigger.id == 'morning' }}"
+        then:
+          - action: input_boolean.turn_off
+            target:
+              entity_id: input_boolean.medication_morning_waiting_for_home
+      - action: script.medication_send_reminder
         data:
-          message: "Last reminder for tonight — have you taken your evening medication?"
+          period: "{{ trigger.id }}"
+          message: "Last reminder for {{ 'today' if trigger.id == 'morning' else 'tonight' }} — have you taken your {{ trigger.id }} medication?"
+          include_home_action: false
           final_reminder: true
 
-  # 16. Evening Notification timeout: re-notify hourly if dismissed (loops until 23:30 or action taken)
-  - id: medication_evening_notification_timeout
-    alias: medication_evening_notification_timeout
+  # 10. Notification timeout: re-notify hourly if dismissed
+  - id: medication_notification_timeout
+    alias: medication_notification_timeout
+    variables:
+      period: "{{ 'morning' if 'morning' in trigger.event.data.entity_id else 'evening' }}"
     triggers:
+      - trigger: event
+        event_type: timer.finished
+        event_data:
+          entity_id: timer.medication_morning_notification_timeout
       - trigger: event
         event_type: timer.finished
         event_data:
@@ -679,47 +430,62 @@ automation:
     conditions:
       - condition: template
         value_template: >
-          {{ states('input_datetime.medication_evening_last_taken')[:10] != now().strftime('%Y-%m-%d') }}
-      - condition: time
-        after: "20:00:00"
-        before: "23:30:00"
+          {{ states('input_datetime.medication_' ~ period ~ '_last_taken')[:10] != now().strftime('%Y-%m-%d') }}
+      - condition: template
+        value_template: >
+          {{ (period == 'morning' and now().hour < 17) or
+             (period == 'evening' and (now().hour >= 20 and (now().hour < 23 or (now().hour == 23 and now().minute < 30)))) }}
     actions:
-      - action: script.medication_evening_send_reminder
+      - action: script.medication_send_reminder
         data:
-          message: "Reminder: have you taken your evening medication?"
+          period: "{{ period }}"
+          message: "Reminder: have you taken your {{ period }} medication?"
 
-  # 17. Evening Startup check — catches HA being down at 22:00
-  - id: medication_evening_startup_check
-    alias: medication_evening_startup_check
+  # 11. Startup check — catches HA being down at trigger times
+  - id: medication_startup_check
+    alias: medication_startup_check
     triggers:
       - trigger: homeassistant
         event: start
-    conditions:
-      - condition: time
-        after: "22:00:00"
-        before: "23:30:00"
-      - condition: template
-        value_template: >
-          {{ states('input_datetime.medication_evening_last_taken')[:10] != now().strftime('%Y-%m-%d') }}
-      - condition: state
-        entity_id: input_boolean.medication_evening_notified_today
-        state: "off"
     actions:
-      - action: script.medication_evening_send_reminder
-        data:
-          message: "Don't forget your evening medication!"
+      - if:
+          - condition: time
+            after: "10:00:00"
+            before: "17:00:00"
+          - condition: template
+            value_template: >
+              {{ states('input_datetime.medication_morning_last_taken')[:10] != now().strftime('%Y-%m-%d') }}
+          - condition: state
+            entity_id: input_boolean.medication_morning_notified_today
+            state: "off"
+        then:
+          - action: script.medication_send_reminder
+            data:
+              period: morning
+              message: "Don't forget your morning medication!"
+              include_home_action: false
+      - if:
+          - condition: time
+            after: "22:00:00"
+            before: "23:30:00"
+          - condition: template
+            value_template: >
+              {{ states('input_datetime.medication_evening_last_taken')[:10] != now().strftime('%Y-%m-%d') }}
+          - condition: state
+            entity_id: input_boolean.medication_evening_notified_today
+            state: "off"
+        then:
+          - action: script.medication_send_reminder
+            data:
+              period: evening
+              message: "Don't forget your evening medication!"
 
-  # =========================================================================
-  # Daily Reset
-  # =========================================================================
-
-  # 18. Midnight reset — clears flags and timers; does NOT clear last_taken datetimes
+  # 12. Midnight reset — clears flags and timers
   - id: medication_daily_reset
     alias: medication_daily_reset
     triggers:
       - trigger: time
         at: "00:00:00"
-    conditions: []
     actions:
       - action: timer.cancel
         target:
