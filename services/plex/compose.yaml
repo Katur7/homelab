@@ -2,7 +2,7 @@ name: plex
 
 services:
   plex:
-    image: ghcr.io/linuxserver/plex:1.43.4.10903-e5521bd8c-ls324
+    image: ghcr.io/linuxserver/plex:1.43.4.10903-e5521bd8c-ls325
     container_name: plex
     restart: unless-stopped
     networks:
@@ -23,6 +23,8 @@ services:
       - /srv/dev-disk-by-uuid-220b73c9-2682-4822-b871-cb499733b15b/tv:/tv
     labels:
       - "wud.autoupdate=true"
+      - "wud.tag.include=^\\d+\\.\\d+\\.\\d+\\.\\d+-[a-zA-Z0-9]+-ls\\d+$$"
+      - "wud.tag.transform=^(\\d+\\.\\d+\\.\\d+)\\.\\d+-[a-zA-Z0-9]+(-ls\\d+)$$ => $$1$$2"
       - "traefik.enable=true"
       - "traefik.http.routers.plex-internal.entrypoints=websecure"
       - "traefik.http.routers.plex-internal.rule=Host(`plex.internal.pippinn.me`)"
