@@ -20,7 +20,6 @@ elif [[ -f "$SCRIPT_DIR/.env" ]]; then
 fi
 
 if [[ -n "$PUSH_URL" ]]; then
-  echo "[$(date -u +%Y-%m-%dT%H:%M:%SZ)] Sending heartbeat to Uptime Kuma for local backup (${JOB})"
   curl -fsS -m 10 --retry 3 "$PUSH_URL" > /dev/null
 else
   echo "[$(date -u +%Y-%m-%dT%H:%M:%SZ)] Warning: No push URL configured for local backup (${JOB})" >&2
