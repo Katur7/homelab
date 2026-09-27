@@ -30,7 +30,7 @@ services:
           memory: 256M
 
   sonarr:
-    image: ghcr.io/linuxserver/sonarr:4.0.20.3014-ls325
+    image: ghcr.io/linuxserver/sonarr:4.0.20.3014-ls326
     container_name: sonarr
     restart: unless-stopped
     networks:
