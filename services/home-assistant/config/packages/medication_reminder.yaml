@@ -135,6 +135,9 @@ script:
           message: "{{ message | default('Have you taken your ' ~ period ~ ' medication?') }}"
           data:
             tag: "medication_{{ period }}_reminder"
+            group: "medication-reminders"
+            channel: "Medication Reminders"
+            importance: high
             actions: >
               {% set p = period | upper %}
               {% if final_reminder %}

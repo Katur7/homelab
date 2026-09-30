@@ -82,6 +82,8 @@ script:
           message: "Time to: {{ task_name }}"
           data:
             tag: "maintenance_{{ task_id }}"
+            group: "maintenance-reminders"
+            channel: "Maintenance Reminders"
             actions:
               - action: "MAINTENANCE_DONE_{{ task_id | upper }}"
                 title: "Done"

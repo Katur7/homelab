@@ -92,6 +92,9 @@ script:
           title: "Low Battery"
           message: >
             {{ device_list | join('\n') }}
+          data:
+            group: "battery-alerts"
+            channel: "Battery Alerts"
 
 automation:
   - alias: "Battery: Alert on Level Drop"
