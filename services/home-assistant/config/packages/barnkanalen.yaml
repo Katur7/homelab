@@ -1,5 +1,5 @@
 # Package: Barnkanalen on Chromecast with Google TV
-# Turns on TV via HDMI-CEC, handles SVT Play profile prompt, and launches SVT Barn live stream.
+# Turns on TV via HDMI-CEC, selects "Titta utan profil", and navigates to Barnkanalen.
 # See: services/home-assistant/specs/07-play-barnkanalen/plan.md
 
 # ---------------------------------------------------------------------------
@@ -9,7 +9,7 @@
 script:
   play_barnkanalen:
     alias: "Play Barnkanalen"
-    description: "Turn on TV via HDMI-CEC, bypass profile screen, and tune to Barnkanalen in SVT Play"
+    description: "Turn on TV via HDMI-CEC and navigate to Barnkanalen in SVT Play"
     icon: mdi:television-play
     mode: single
     sequence:
@@ -30,13 +30,13 @@ script:
         target:
           entity_id: remote.chromecast
         data:
-          activity: "https://www.svtplay.se/kanaler/svtbarn"
+          activity: "https://www.svtplay.se"
 
-      # 3. Wait for SVT Play profile selection screen to load
+      # 3. Wait for profile selection screen ("Vem tittar?") to render
       - delay:
-          seconds: 3
+          seconds: 4
 
-      # 4. Navigate down to "Titta utan profil" (Watch without profile) and select it
+      # 4. Navigate down to "Titta utan profil" and select it
       - action: remote.send_command
         target:
           entity_id: remote.chromecast
@@ -50,14 +50,58 @@ script:
         data:
           command: DPAD_CENTER
 
-      # 5. Wait for guest session to initialize, then tune directly to Barnkanalen
+      # 5. Wait for Home screen to load
       - delay:
-          seconds: 2
-      - action: remote.turn_on
+          seconds: 3
+
+      # 6. Open left sidebar menu
+      - action: remote.send_command
         target:
           entity_id: remote.chromecast
         data:
-          activity: "https://www.svtplay.se/kanaler/svtbarn"
+          command: DPAD_LEFT
+      - delay:
+          milliseconds: 500
+
+      # 7. Move down 4 times to "Kanaler"
+      - repeat:
+          count: 4
+          sequence:
+            - action: remote.send_command
+              target:
+                entity_id: remote.chromecast
+              data:
+                command: DPAD_DOWN
+            - delay:
+                milliseconds: 300
+
+      # 8. Open "Kanaler" section
+      - action: remote.send_command
+        target:
+          entity_id: remote.chromecast
+        data:
+          command: DPAD_CENTER
+      - delay:
+          seconds: 1.5
+
+      # 9. Move right twice to highlight "Barnkanalen"
+      - repeat:
+          count: 2
+          sequence:
+            - action: remote.send_command
+              target:
+                entity_id: remote.chromecast
+              data:
+                command: DPAD_RIGHT
+            - delay:
+                milliseconds: 300
+
+      # 10. Start playback of Barnkanalen
+      - action: remote.send_command
+        target:
+          entity_id: remote.chromecast
+        data:
+          command: DPAD_CENTER
 
   turn_off_tv:
     alias: "Turn Off TV"
