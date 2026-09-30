@@ -1,0 +1,42 @@
+# Package: Barnkanalen on Chromecast with Google TV
+# Turns on TV via HDMI-CEC and launches SVT Barn live stream on SVT Play app.
+# See: services/home-assistant/specs/07-play-barnkanalen/plan.md
+
+# ---------------------------------------------------------------------------
+# Scripts
+# ---------------------------------------------------------------------------
+
+script:
+  play_barnkanalen:
+    alias: "Play Barnkanalen"
+    description: "Turn on TV via HDMI-CEC and launch Barnkanalen in SVT Play"
+    icon: mdi:television-play
+    mode: single
+    sequence:
+      # 1. Wake Chromecast & trigger HDMI-CEC if device is off or in standby
+      - choose:
+          - conditions:
+              - condition: template
+                value_template: "{{ states('remote.chromecast') in ['off', 'standby'] }}"
+            sequence:
+              - action: remote.turn_on
+                target:
+                  entity_id: remote.chromecast
+              - delay:
+                  seconds: 2
+      # 2. Launch SVT Play app directly to Barnkanalen live stream
+      - action: remote.open_url
+        target:
+          entity_id: remote.chromecast
+        data:
+          url: "https://www.svtplay.se/kanaler/svtbarn"
+
+  turn_off_tv:
+    alias: "Turn Off TV"
+    description: "Put Chromecast into standby / turn off TV via HDMI-CEC"
+    icon: mdi:television-off
+    mode: single
+    sequence:
+      - action: remote.turn_off
+        target:
+          entity_id: remote.chromecast
