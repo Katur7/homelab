@@ -1,5 +1,5 @@
-# Package: Barnkanalen on Chromecast (Google Cast)
-# Turns on TV via HDMI-CEC and streams Barnkanalen (SVT Barn) directly via Google Cast.
+# Package: Barnkanalen on Chromecast (SVT Play Integration)
+# Turns on TV via HDMI-CEC and streams Barnkanalen dynamically using svt_play.
 # See: services/home-assistant/specs/07-play-barnkanalen/plan.md
 
 # ---------------------------------------------------------------------------
@@ -25,13 +25,12 @@ script:
               - delay:
                   seconds: 2
 
-      # 2. Cast Barnkanalen live DASH stream directly
-      - action: media_player.play_media
+      # 2. Play Barnkanalen via svt_play integration (dynamically resolves fresh stream URL)
+      - action: svt_play.play_channel
         target:
           entity_id: media_player.living_room_tv_2
         data:
-          media_content_id: "https://ed7.cdn.svt.se/l6/se/svtb/manifest.mpd?format=dash&defaultSubLang=1"
-          media_content_type: "video/mp4"
+          channel: barnkanalen
 
   turn_off_tv:
     alias: "Turn Off TV"

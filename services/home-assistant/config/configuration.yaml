@@ -21,3 +21,5 @@ zha:
       extra_providers:
         - type: z2m
           url: https://raw.githubusercontent.com/Koenkk/zigbee-OTA/master/index.json
+
+svt_play:
