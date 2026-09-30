@@ -1,5 +1,5 @@
 # Package: Barnkanalen on Chromecast with Google TV
-# Turns on TV via HDMI-CEC and launches SVT Barn live stream on SVT Play app.
+# Turns on TV via HDMI-CEC, handles SVT Play profile prompt, and launches SVT Barn live stream.
 # See: services/home-assistant/specs/07-play-barnkanalen/plan.md
 
 # ---------------------------------------------------------------------------
@@ -9,7 +9,7 @@
 script:
   play_barnkanalen:
     alias: "Play Barnkanalen"
-    description: "Turn on TV via HDMI-CEC and launch Barnkanalen in SVT Play"
+    description: "Turn on TV via HDMI-CEC, bypass profile screen, and tune to Barnkanalen in SVT Play"
     icon: mdi:television-play
     mode: single
     sequence:
@@ -24,7 +24,35 @@ script:
                   entity_id: remote.chromecast
               - delay:
                   seconds: 2
-      # 2. Launch SVT Play app directly to Barnkanalen via Android TV Remote activity
+
+      # 2. Launch SVT Play app
+      - action: remote.turn_on
+        target:
+          entity_id: remote.chromecast
+        data:
+          activity: "https://www.svtplay.se/kanaler/svtbarn"
+
+      # 3. Wait for SVT Play profile selection screen to load
+      - delay:
+          seconds: 3
+
+      # 4. Navigate down to "Titta utan profil" (Watch without profile) and select it
+      - action: remote.send_command
+        target:
+          entity_id: remote.chromecast
+        data:
+          command: DPAD_DOWN
+      - delay:
+          milliseconds: 500
+      - action: remote.send_command
+        target:
+          entity_id: remote.chromecast
+        data:
+          command: DPAD_CENTER
+
+      # 5. Wait for guest session to initialize, then tune directly to Barnkanalen
+      - delay:
+          seconds: 2
       - action: remote.turn_on
         target:
           entity_id: remote.chromecast

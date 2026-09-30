@@ -1,7 +1,7 @@
 # Play Barnkanalen on Chromecast with Google TV — Spec 07 Plan
 
 ## Context
-Provide a reliable, one-touch way to turn on the TV and tune directly to the **Barnkanalen (SVT Barn)** live stream in Home Assistant using the native **Android TV Remote** integration with entity `remote.chromecast`.
+Provide a reliable, one-touch way to turn on the TV and tune directly to the **Barnkanalen (SVT Barn)** live stream in Home Assistant using the native **Android TV Remote** integration (`remote.chromecast`).
 
 ---
 
@@ -9,14 +9,11 @@ Provide a reliable, one-touch way to turn on the TV and tune directly to the **B
 
 1. **Target Entity**: `remote.chromecast` (Android TV Remote integration).
 2. **HDMI-CEC Power On**: Calling `remote.turn_on` wakes the Chromecast from standby, signaling the TV via HDMI-CEC to power on and switch to the Chromecast input.
-3. **App Deep Linking**: Calling `remote.turn_on` with `activity: "https://www.svtplay.se/kanaler/svtbarn"` opens the live channel directly in the installed **SVT Play** app (`se.svt.svtplay`).
-
----
-
-## Prerequisites
-
-- **SVT Play App**: Installed from the Google Play Store on the Chromecast with Google TV.
-- **HDMI-CEC**: Enabled on TV to allow waking the screen via the Chromecast.
+3. **App Launch & Profile Bypass**:
+   - Calling `remote.turn_on` with `activity: "https://www.svtplay.se/kanaler/svtbarn"` launches the SVT Play app.
+   - SVT Play presents a "Vem tittar?" (Who is watching?) profile selection prompt.
+   - The script waits 3 seconds, sends `DPAD_DOWN` to highlight **"Titta utan profil"** (Watch without profile), and sends `DPAD_CENTER` to select it.
+   - After a 2-second pause to let SVT Play load into guest mode, the script re-issues the `https://www.svtplay.se/kanaler/svtbarn` deep link, immediately starting playback of the Barnkanalen channel.
 
 ---
 
@@ -26,16 +23,17 @@ File: [barnkanalen.yaml](file:///Users/grimur/personal-code/homelab/services/hom
 
 ### Scripts
 - `script.play_barnkanalen`:
-  - Checks if `remote.chromecast` is `off` or `standby`; if so, turns it on and waits 2 seconds for wakeup and HDMI handshake.
-  - Calls `remote.turn_on` with `activity: "https://www.svtplay.se/kanaler/svtbarn"` to launch SVT Play straight into Barnkanalen.
+  - Wakes up Chromecast / TV via HDMI-CEC if off or in standby.
+  - Launches SVT Play.
+  - Selects "Titta utan profil" via D-pad commands (`DPAD_DOWN` -> `DPAD_CENTER`).
+  - Tunes into the live Barnkanalen stream.
 - `script.turn_off_tv`:
-  - Calls `remote.turn_off` on `remote.chromecast` to return to standby and trigger TV power-off via HDMI-CEC.
+  - Puts `remote.chromecast` into standby and turns off the TV via HDMI-CEC.
 
 ---
 
-## Dashboard Card Examples
+## Dashboard Card Example
 
-### Standard Button Card
 ```yaml
 type: button
 name: Barnkanalen
@@ -46,50 +44,4 @@ tap_action:
 hold_action:
   action: call-service
   service: script.turn_off_tv
-```
-
-### Tile Card
-```yaml
-type: tile
-entity: script.play_barnkanalen
-name: Barnkanalen
-icon: mdi:television-play
-tap_action:
-  action: call-service
-  service: script.play_barnkanalen
-```
-
----
-
-## Trigger Integration Examples
-
-### Physical Button (e.g., Zigbee / IKEA Tradfri / Aqara)
-```yaml
-alias: "Kids Button - Play Barnkanalen"
-trigger:
-  - platform: event
-    event_type: zha_event
-    event_data:
-      device_ieee: "xx:xx:xx:xx:xx:xx:xx:xx"
-      command: "press"
-action:
-  - action: script.play_barnkanalen
-```
-
-### Scheduled Routine
-```yaml
-alias: "Morning Routine - Barnkanalen"
-trigger:
-  - platform: time
-    at: "06:45:00"
-condition:
-  - condition: time
-    weekday:
-      - mon
-      - tue
-      - wed
-      - thu
-      - fri
-action:
-  - action: script.play_barnkanalen
 ```
