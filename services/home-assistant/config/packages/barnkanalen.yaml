@@ -24,12 +24,12 @@ script:
                   entity_id: remote.chromecast
               - delay:
                   seconds: 2
-      # 2. Launch SVT Play app directly to Barnkanalen live stream
-      - action: remote.open_url
+      # 2. Launch SVT Play app directly to Barnkanalen via Android TV Remote activity
+      - action: remote.turn_on
         target:
           entity_id: remote.chromecast
         data:
-          url: "https://www.svtplay.se/kanaler/svtbarn"
+          activity: "https://www.svtplay.se/kanaler/svtbarn"
 
   turn_off_tv:
     alias: "Turn Off TV"

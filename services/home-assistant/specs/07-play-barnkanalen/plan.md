@@ -9,7 +9,7 @@ Provide a reliable, one-touch way to turn on the TV and tune directly to the **B
 
 1. **Target Entity**: `remote.chromecast` (Android TV Remote integration).
 2. **HDMI-CEC Power On**: Calling `remote.turn_on` wakes the Chromecast from standby, signaling the TV via HDMI-CEC to power on and switch to the Chromecast input.
-3. **App Deep Linking**: Calling `remote.open_url` with `https://www.svtplay.se/kanaler/svtbarn` opens the live channel directly in the installed **SVT Play** app (`se.svt.svtplay`).
+3. **App Deep Linking**: Calling `remote.turn_on` with `activity: "https://www.svtplay.se/kanaler/svtbarn"` opens the live channel directly in the installed **SVT Play** app (`se.svt.svtplay`).
 
 ---
 
@@ -27,7 +27,7 @@ File: [barnkanalen.yaml](file:///Users/grimur/personal-code/homelab/services/hom
 ### Scripts
 - `script.play_barnkanalen`:
   - Checks if `remote.chromecast` is `off` or `standby`; if so, turns it on and waits 2 seconds for wakeup and HDMI handshake.
-  - Calls `remote.open_url` with `https://www.svtplay.se/kanaler/svtbarn` to launch SVT Play straight into Barnkanalen.
+  - Calls `remote.turn_on` with `activity: "https://www.svtplay.se/kanaler/svtbarn"` to launch SVT Play straight into Barnkanalen.
 - `script.turn_off_tv`:
   - Calls `remote.turn_off` on `remote.chromecast` to return to standby and trigger TV power-off via HDMI-CEC.
 
