@@ -17,7 +17,7 @@ To query current state: `docker exec uptime-kuma sqlite3 /app/data/kuma.db "SELE
 | Name | Type | URL | Interval |
 |------|------|-----|----------|
 | Hello - Cloudflare tunnel | HTTP | `https://hello.pippinn.me` | 300s |
-| Backup - Local photos | Push | *(secret)* | 93600s (26h) |
+| Backup - Local photos | Push | *(secret)* | 691200s (8 days) |
 | Backup - Local homelab | Push | *(secret)* | 93600s (26h) |
 | Backup - Offsite (pi-backup) | Push | *(secret)* | 691200s (8 days) |
 | WireGuard (Container) | Push | *(secret)* | 360s (6m) |
