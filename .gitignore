@@ -30,6 +30,7 @@ volumes/
 !/services/home-assistant/config/sensors/
 !/services/home-assistant/config/templates/
 /services/home-assistant/matter-server/
+/services/home-assistant/music-assistant-server/
 /services/immich/database/
 /services/linguacafe/database/
 /services/linguacafe/storage/

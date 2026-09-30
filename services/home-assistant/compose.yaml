@@ -57,6 +57,7 @@ services:
     network_mode: host
     volumes:
       - ./music-assistant-server/data:/data/
+      - /srv/dev-disk-by-uuid-f1209e02-5b26-491f-ac40-f951e9ddfbb0/music:/music/
     env_file:
       - ../../global.env
     labels:
@@ -71,11 +72,6 @@ services:
       - "traefik.http.routers.music-assistant-internal.entrypoints=websecure"
       - "traefik.http.routers.music-assistant-internal.rule=Host(`music-assistant.internal.pippinn.me`)"
     restart: unless-stopped
-    deploy:
-      resources:
-        limits:
-          cpus: "0.5"
-          memory: 256M
 
   ord_dagsins:
     image: katur/ord_dagsins
