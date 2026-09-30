@@ -12,7 +12,7 @@ Provide an instant, one-touch way to turn on the TV and stream **Barnkanalen (SV
 3. **Direct Live Stream Playback**:
    - Calling `media_player.play_media` instructs Google Cast's Default Media Receiver to stream Barnkanalen directly using the verified SVT DASH manifest:
      - **URL**: `https://ed7.cdn.svt.se/l6/se/svtb/manifest.mpd?format=dash&defaultSubLang=1`
-     - **Type**: `video/mp4`
+     - **Type**: `video`
    - Bypasses all app launches, account logins, menus, and profile prompts.
 
 ---

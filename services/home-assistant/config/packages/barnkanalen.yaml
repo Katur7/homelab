@@ -31,7 +31,7 @@ script:
           entity_id: media_player.chromecast
         data:
           media_content_id: "https://ed7.cdn.svt.se/l6/se/svtb/manifest.mpd?format=dash&defaultSubLang=1"
-          media_content_type: "video/mp4"
+          media_content_type: "video"
 
   turn_off_tv:
     alias: "Turn Off TV"
