@@ -379,9 +379,9 @@ Update `.gitignore` to allow tracked `.env` while strictly ignoring secrets:
      SystemMaxUse=1G
      ```
      `sudo systemctl restart systemd-journald`
-   * Configure 4GB NVMe swapfile with conservative swappiness (`vm.swappiness=10`):
+   * Configure 8GB NVMe swapfile with conservative swappiness (`vm.swappiness=10`):
      ```bash
-     sudo fallocate -l 4G /swapfile
+     sudo fallocate -l 8G /swapfile
      sudo chmod 600 /swapfile
      sudo mkswap /swapfile
      sudo swapon /swapfile
