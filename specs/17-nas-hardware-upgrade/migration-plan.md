@@ -53,8 +53,8 @@
    UUID=<UUID-DISK3>   /srv/disk3    ext4   defaults,noatime   0 2
    UUID=<UUID-PARITY>  /srv/parity1  ext4   defaults,noatime   0 2
 
-   # MergerFS Unified Storage Pool
-   /srv/disk*          /mnt/storage  fuse.mergerfs  defaults,nonempty,allow_other,use_ino,cache.files=partial,category.create=mfs,minfreespace=50G,fsname=mergerfs,umask=002  0 0
+   # MergerFS Unified Storage Pool (waits for physical disks to prevent race conditions)
+   /srv/disk*          /mnt/storage  fuse.mergerfs  defaults,nonempty,allow_other,use_ino,cache.files=partial,category.create=mfs,minfreespace=50G,fsname=mergerfs,umask=002,x-systemd.requires-mounts-for=/srv/disk1,x-systemd.requires-mounts-for=/srv/disk2,x-systemd.requires-mounts-for=/srv/disk3  0 0
    ```
 
    > **Policy `category.create=mfs` (Most Free Space):** Writes new files to whichever physical drive currently has the most free space.
@@ -71,7 +71,7 @@ sudo chmod -R 2775 /mnt/storage
 
 > [!TIP]
 > **SetGID (`2775`):** Ensures all new files and directories inherit group `grimur` (GID 1000) regardless of which process creates them.
-> **Starr Hardlink Optimization:** By mounting `/mnt/storage:/data` across Radarr, Sonarr, and transmission/qbittorrent, completed torrents are imported via instantaneous zero-copy hardlinks instead of slow disk-to-disk copies.
+> **Starr Mount Strategy:** To preserve existing Radarr and Sonarr databases without database path migrations, services will initially maintain separate mounts (`/mnt/storage/media/movies:/movies`, `/mnt/storage/downloads/complete/movies:/downloads/movies`). Consolidating to a single `/data` mount for atomic zero-copy hardlinks is deferred to a dedicated follow-up milestone.
 
 ### 2.4 Network File Sharing (Samba)
 
@@ -91,6 +91,16 @@ Add shares to `/etc/samba/smb.conf`:
    printing = bsd
    printcap name = /dev/null
    disable spoolss = yes
+
+   # macOS Performance & Metadata Optimizations (vfs_fruit)
+   vfs objects = catia fruit streams_xattr
+   fruit:metadata = stream
+   fruit:model = Macmini
+   fruit:veto_appledouble = no
+   fruit:posix_rename = yes
+   fruit:zero_file_id = yes
+   fruit:wipe_intentionally_left_blank_rfork = yes
+   fruit:delete_empty_adfiles = yes
 
 [media]
    path = /mnt/storage/media
@@ -306,7 +316,8 @@ Update `.gitignore` to allow tracked `.env` while strictly ignoring secrets:
    * Update router DHCP reservation for `pippinn` (`192.168.86.17`) with the new NIC's MAC address once first booted.
 3. **First Boot & BIOS Check:**
    * Attach monitor + keyboard.
-   * Verify 16GB RAM detected in BIOS.
+   * Verify 32GB RAM detected in BIOS.
+   * Confirm UEFI boot mode (existing Plextor installation is verified UEFI).
    * Set SATA mode to **AHCI**.
    * Set Plextor SSD as primary boot drive.
 4. **Boot Validation:**
@@ -345,7 +356,7 @@ Update `.gitignore` to allow tracked `.env` while strictly ignoring secrets:
      sudo systemctl enable --now systemd-resolved
      ```
 
-3. **User Groups & Host Hardening:**
+3. **User Groups, Host Hardening & Swap:**
    * Add user `grimur` to required groups:
      ```bash
      sudo usermod -aG sudo,docker,render,video,users grimur
@@ -368,6 +379,16 @@ Update `.gitignore` to allow tracked `.env` while strictly ignoring secrets:
      SystemMaxUse=1G
      ```
      `sudo systemctl restart systemd-journald`
+   * Configure 4GB NVMe swapfile with conservative swappiness (`vm.swappiness=10`):
+     ```bash
+     sudo fallocate -l 4G /swapfile
+     sudo chmod 600 /swapfile
+     sudo mkswap /swapfile
+     sudo swapon /swapfile
+     echo '/swapfile none swap sw 0 0' | sudo tee -a /etc/fstab
+     echo 'vm.swappiness=10' | sudo tee /etc/sysctl.d/99-swappiness.conf
+     sudo sysctl --system
+     ```
 
 4. **Package & Driver Installation:**
    * Ensure `non-free-firmware` and `non-free` are enabled in `/etc/apt/sources.list`.
