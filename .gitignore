@@ -9,6 +9,7 @@
 # Docker Data
 volumes/
 
+.claude/settings.local.json
 .gstack/
 
 # Service state (runtime data, gitignored — covered by BorgBackup)
