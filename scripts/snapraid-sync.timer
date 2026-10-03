@@ -1,0 +1,14 @@
+# snapraid-sync.timer — Daily trigger for SnapRAID sync
+# Runs daily at 04:00 (persistent if machine was powered off)
+
+[Unit]
+Description=Run SnapRAID Sync Daily
+Requires=snapraid-sync.service
+
+[Timer]
+OnCalendar=*-*-* 04:00:00
+Persistent=true
+RandomizedDelaySec=300
+
+[Install]
+WantedBy=timers.target

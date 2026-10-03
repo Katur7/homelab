@@ -1,0 +1,23 @@
+# snapraid-scrub.service — SnapRAID weekly scrub
+#
+# Install:
+#   sudo cp /home/grimur/homelab/scripts/snapraid-scrub.{service,timer} /etc/systemd/system/
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable --now snapraid-scrub.timer
+# Or run:
+#   sudo /home/grimur/homelab/scripts/setup-snapraid-maintenance.sh
+
+[Unit]
+Description=SnapRAID Weekly Scrub
+Documentation=https://www.snapraid.it/
+After=local-fs.target
+ConditionPathExists=/etc/snapraid.conf
+
+[Service]
+Type=oneshot
+ExecStart=/home/grimur/homelab/scripts/snapraid-scrub.sh
+Nice=19
+IOSchedulingClass=idle
+
+[Install]
+WantedBy=multi-user.target
