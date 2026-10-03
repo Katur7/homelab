@@ -1,10 +1,5 @@
 http:
   routers:
-    omv:
-      entryPoints:
-        - websecure
-      rule: "Host (`omv.internal.pippinn.me`)"
-      service: omv
     uptime:
       entryPoints:
         - websecure
@@ -22,11 +17,6 @@ http:
       service: monitoring
 
   services:
-    omv:
-      loadBalancer:
-        servers:
-          - url: "http://192.168.86.17:5080"
-        passHostHeader: true
     uptime:
       loadBalancer:
         servers:
