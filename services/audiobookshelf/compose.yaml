@@ -12,8 +12,8 @@ services:
     volumes:
       - ./config:/config
       - ./metadata:/metadata
-      - /srv/dev-disk-by-uuid-f1209e02-5b26-491f-ac40-f951e9ddfbb0/books/audiobooks:/audiobooks
-      - /srv/dev-disk-by-uuid-f1209e02-5b26-491f-ac40-f951e9ddfbb0/books/ebooks:/ebooks
+      - /mnt/storage/books/audiobooks:/audiobooks
+      - /mnt/storage/books/ebooks:/ebooks
     labels:
       - "wud.autoupdate=true"
       - "traefik.enable=true"

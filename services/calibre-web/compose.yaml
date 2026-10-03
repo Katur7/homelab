@@ -12,7 +12,7 @@ services:
       - vars.env
     volumes:
       - ./config:/config
-      - /srv/dev-disk-by-uuid-f1209e02-5b26-491f-ac40-f951e9ddfbb0/books/ebooks:/ebooks:ro
+      - /mnt/storage/books/ebooks:/ebooks:ro
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8083"]
       interval: 10s
