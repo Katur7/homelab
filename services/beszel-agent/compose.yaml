@@ -2,15 +2,25 @@ name: beszel-agent
 
 services:
   beszel-agent:
-    image: henrygd/beszel-agent
+    image: henrygd/beszel-agent:alpine
     container_name: beszel-agent
     restart: unless-stopped
     network_mode: host
+    cap_add:
+      - SYS_RAWIO
+      - SYS_ADMIN
+    devices:
+      - /dev/sda:/dev/sda
+      - /dev/sdb:/dev/sdb
+      - /dev/sdc:/dev/sdc
+      - /dev/sdd:/dev/sdd
+      - /dev/sde:/dev/sde
+      - /dev/nvme0:/dev/nvme0
+      - /dev/nvme0n1:/dev/nvme0n1
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock:ro
       - ./beszel_agent_data:/var/lib/beszel-agent
-      # monitor other disks / partitions by mounting a folder in /extra-filesystems
-      # - /mnt/disk/.beszel:/extra-filesystems/sda1:ro
+      - /run/udev:/run/udev:ro
     environment:
       LISTEN: 45876
       KEY: ${BESZEL_AGENT_KEY_NAS}
@@ -20,4 +30,4 @@ services:
       resources:
         limits:
           cpus: "0.1"
-          memory: 32M
+          memory: 64M
