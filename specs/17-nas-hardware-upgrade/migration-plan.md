@@ -359,7 +359,7 @@ Update `.gitignore` to allow tracked `.env` while strictly ignoring secrets:
 3. **User Groups, Host Hardening & Swap:**
    * Add user `grimur` to required groups:
      ```bash
-     sudo usermod -aG sudo,docker,render,video,users grimur
+     sudo usermod -aG sudo,render,video,users grimur
      ```
    * Deploy SSH public keys to `/home/grimur/.ssh/authorized_keys`.
    * Apply SSH hardening in `/etc/ssh/sshd_config.d/hardening.conf`:
@@ -392,19 +392,28 @@ Update `.gitignore` to allow tracked `.env` while strictly ignoring secrets:
 
 4. **Package & Driver Installation:**
    * Ensure `non-free-firmware` and `non-free` are enabled in `/etc/apt/sources.list`.
-   * Install packages:
+   * Install base packages and GPU acceleration libraries:
      ```bash
      sudo apt update && sudo apt install -y \
-       curl git mergerfs snapraid samba smartmontools \
+       curl git mergerfs snapraid samba smartmontools pciutils \
        intel-microcode intel-media-va-driver-non-free vainfo fuse3
      ```
-   * Verify QuickSync VA-API drivers:
+   * **Intel N150 GPU Support (Kernel 6.12 via Backports):**
+     The Intel N150 ("Twin Lake", PCI ID `8086:46d4`) was released after Debian 12's Linux 6.1 kernel. Enable `bookworm-backports` to install the 6.12+ kernel and updated non-free firmware:
      ```bash
-     vainfo
+     echo "deb http://deb.debian.org/debian bookworm-backports main contrib non-free non-free-firmware" | sudo tee /etc/apt/sources.list.d/backports.list
+     sudo apt update
+     sudo apt install -t bookworm-backports -y linux-image-amd64 firmware-misc-nonfree
+     sudo reboot
+     ```
+   * Verify QuickSync VA-API drivers after reboot:
+     ```bash
+     vainfo --display drm --device /dev/dri/renderD128
      ```
    * Install Docker Engine & Compose plugin:
      ```bash
      curl -fsSL https://get.docker.com | sh
+     sudo usermod -aG docker grimur
      ```
 
 5. **Storage, Mounts & Permissions:**
@@ -424,13 +433,24 @@ Update `.gitignore` to allow tracked `.env` while strictly ignoring secrets:
    * Configure Samba (`/etc/samba/smb.conf`) and set `grimur` SMB password.
    * Recreate `/etc/snapraid.conf` pointing to `/srv/disk*` and `/srv/parity1`.
 
-6. **GitOps Deployment & Config Normalization:**
+6. **GitOps Deployment & Service Bring-Up:**
    * Clone repo to `/home/grimur/homelab`.
-   * Update `.gitignore` to allow tracked `.env` and ignore `*.secret.env`.
-   * **Execute `.env` & `.secret.env` Migration:**
-     - Rename all `vars.env` files to `.env` (`git mv <dir>/vars.env <dir>/.env`).
-     - Restore secret `.env` files from Borg backup as `.secret.env`.
-     - Update `compose.yaml` files referencing `vars.env` to `.env` (and add `.secret.env` where secrets exist).
+   * **Overlay Runtime State, Databases & Secrets from Old SSD:**
+     Keep the existing `vars.env` + `.env` pattern intact during bring-up to avoid breaking container startups. Copy runtime state from the attached Plextor SSD (`/mnt/old-omv`):
+     ```bash
+     sudo rsync -av --keep-dirlinks \
+       --include='*/' \
+       --include='.env' \
+       --include='acme.json' \
+       --include='*.db' \
+       --include='*.sqlite3' \
+       /mnt/old-omv/home/grimur/homelab/ /home/grimur/homelab/
+     sudo chown -R grimur:grimur /home/grimur/homelab
+     chmod 600 /home/grimur/homelab/infrastructure/gateway/config/acme.json 2>/dev/null
+     chmod +x /home/grimur/homelab/scripts/*.sh
+     ```
+     > [!NOTE]
+     > **Deferred `.env` Normalization:** Retiring `vars.env` in favor of `.env` / `.secret.env` is deferred to Phase 3 (Post-Migration) so the stack can be brought up and validated with zero configuration churn.
    * Update [global.env](file:///Users/grimur/personal-code/homelab/global.env) to normalize `PGID=1000`:
      ```env
      PUID=1000
@@ -440,12 +460,7 @@ Update `.gitignore` to allow tracked `.env` while strictly ignoring secrets:
    * Update [services/beszel-agent/compose.yaml](file:///Users/grimur/personal-code/homelab/services/beszel-agent/compose.yaml) to `:alpine` with `cap_add` and `/dev/*` devices for S.M.A.R.T. monitoring (Section 3.2).
    * **Update Storage Mount Paths in `services/*/compose.yaml`:**
      - Map `/srv/dev-disk-by-uuid-.../...` to `/mnt/storage/...`.
-     - *Important:* Keep right-hand container-side paths identical (`/mnt/storage/media/movies:/movies`, `/mnt/storage/photos:/data`, etc.) to preserve Radarr, Sonarr, Plex, and Immich databases without triggering library rescans or lost watch states.
-   * **Restore Traefik Certificates:**
-     - Restore `acme.json` and enforce strict permissions:
-       ```bash
-       chmod 600 /home/grimur/homelab/infrastructure/gateway/config/acme.json
-       ```
+     - *Important:* Keep right-hand container-side paths identical (`/mnt/storage/movies:/movies`, `/mnt/storage/photos:/data`, etc.) to preserve Radarr, Sonarr, Plex, and Immich databases without triggering library rescans or lost watch states.
    * **Verify Home Assistant USB Coordinator:**
      - Confirm the USB coordinator is present: `ls -l /dev/ttyUSB*` (or `/dev/serial/by-id/*`).
    * Set up Docker maintenance:
@@ -476,5 +491,11 @@ Update `.gitignore` to allow tracked `.env` while strictly ignoring secrets:
    * Link and enable `scripts/snapraid-sync.timer` and `scripts/snapraid-scrub.timer`.
 4. **Deploy Automated Borg Backup Systemd Timer:**
    * Create and enable `borg-backup.service` and `borg-backup.timer` to schedule `infrastructure/backup/backup-to-pi.sh` nightly at 02:00, replacing the OMV Borg plugin.
-5. **Update Documentation:**
+5. **Execute `.env` & `.secret.env` Normalization (from Section 4):**
+   * Rename all `vars.env` files to `.env` (`git mv <dir>/vars.env <dir>/.env`).
+   * Rename all secret `.env` files to `.secret.env` (`mv <dir>/.env <dir>/.secret.env`).
+   * Update `.gitignore` to allow tracked `.env` and ignore `*.secret.env`.
+   * Update `compose.yaml` files referencing `vars.env` to `.env` (and add `.secret.env` where secrets exist).
+   * Verify all containers reload cleanly with `docker compose config`.
+6. **Update Documentation:**
    * Update `ARCHITECTURE.md` with new CPU, RAM, and storage architecture.
