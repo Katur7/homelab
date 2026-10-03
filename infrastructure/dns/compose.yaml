@@ -10,7 +10,7 @@ networks:
     name: pihole_network
     driver: macvlan
     driver_opts:
-      parent: eth0
+      parent: enp3s0
     enable_ipv6: true
     ipam:
       config:
