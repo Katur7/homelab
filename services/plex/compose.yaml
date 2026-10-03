@@ -18,9 +18,9 @@ services:
       - "32414:32414/udp"
     volumes:
       - ./config:/config
-      - /srv/dev-disk-by-uuid-0ddafbf7-f06d-424d-8e9c-95d97fbd4484/kids:/kids
-      - /srv/dev-disk-by-uuid-f1209e02-5b26-491f-ac40-f951e9ddfbb0/movies:/movies
-      - /srv/dev-disk-by-uuid-220b73c9-2682-4822-b871-cb499733b15b/tv:/tv
+      - /mnt/storage/kids:/kids
+      - /mnt/storage/movies:/movies
+      - /mnt/storage/tv:/tv
     labels:
       - "wud.autoupdate=true"
       - "wud.tag.include=^\\d+\\.\\d+\\.\\d+\\.\\d+-[a-zA-Z0-9]+-ls\\d+$$"

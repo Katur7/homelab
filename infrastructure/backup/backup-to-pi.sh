@@ -27,7 +27,7 @@ log "Creating immich_photos archive"
 borg create --stats \
   --upload-ratelimit "$RATE" \
   "$REPO::immich_photos-{now}" \
-  /srv/dev-disk-by-uuid-0ddafbf7-f06d-424d-8e9c-95d97fbd4484/photos
+  /mnt/storage/photos
 
 borg prune --stats --glob-archives 'immich_photos-*' \
   --keep-weekly 8 --keep-monthly 12 --keep-yearly 2 \

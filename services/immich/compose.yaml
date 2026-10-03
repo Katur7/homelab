@@ -13,7 +13,7 @@ services:
       - vars.env
       - .env
     volumes:
-      - /srv/dev-disk-by-uuid-0ddafbf7-f06d-424d-8e9c-95d97fbd4484/photos:/data
+      - /mnt/storage/photos:/data
       - /etc/localtime:/etc/localtime:ro
     depends_on:
       - redis

@@ -11,10 +11,10 @@ services:
       - ../../global.env
     volumes:
       - ./radarr-config:/config
-      - /srv/dev-disk-by-uuid-f1209e02-5b26-491f-ac40-f951e9ddfbb0/movies:/movies
-      - /srv/dev-disk-by-uuid-f1209e02-5b26-491f-ac40-f951e9ddfbb0/downloads-movies:/downloads/movies
-      - /srv/dev-disk-by-uuid-0ddafbf7-f06d-424d-8e9c-95d97fbd4484/kids/movies:/kids/movies
-      - /srv/dev-disk-by-uuid-f1209e02-5b26-491f-ac40-f951e9ddfbb0/downloads-kids-movies:/downloads/kids/movies
+      - /mnt/storage/movies:/movies
+      - /mnt/storage/downloads-movies:/downloads/movies
+      - /mnt/storage/kids/movies:/kids/movies
+      - /mnt/storage/downloads-kids-movies:/downloads/kids/movies
     labels:
       - "wud.autoupdate=true"
       - "traefik.enable=true"
@@ -39,8 +39,8 @@ services:
       - ../../global.env
     volumes:
       - ./sonarr-config:/config
-      - /srv/dev-disk-by-uuid-220b73c9-2682-4822-b871-cb499733b15b/tv:/tv
-      - /srv/dev-disk-by-uuid-f1209e02-5b26-491f-ac40-f951e9ddfbb0/downloads-tv:/downloads/tv
+      - /mnt/storage/tv:/tv
+      - /mnt/storage/downloads-tv:/downloads/tv
     labels:
       - "wud.autoupdate=true"
       - "traefik.enable=true"
@@ -92,9 +92,9 @@ services:
       - "32517:32517"
     volumes:
       - ./qbittorrent-config:/config
-      - /srv/dev-disk-by-uuid-f1209e02-5b26-491f-ac40-f951e9ddfbb0/downloads-movies:/downloads/movies
-      - /srv/dev-disk-by-uuid-f1209e02-5b26-491f-ac40-f951e9ddfbb0/downloads-tv:/downloads/tv
-      - /srv/dev-disk-by-uuid-0ddafbf7-f06d-424d-8e9c-95d97fbd4484/kids:/downloads/kids
+      - /mnt/storage/downloads-movies:/downloads/movies
+      - /mnt/storage/downloads-tv:/downloads/tv
+      - /mnt/storage/kids:/downloads/kids
     labels:
       - "wud.autoupdate=true"
       - "traefik.enable=true"
