@@ -4,7 +4,7 @@ services:
   vikunja:
     image: vikunja/vikunja:2.6.0
     container_name: vikunja
-    user: 1000:100
+    user: 1000:1000
     restart: unless-stopped
     networks:
       - traefik_internal
