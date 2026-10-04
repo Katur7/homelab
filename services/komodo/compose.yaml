@@ -1,17 +1,46 @@
 name: komodo
 
 services:
-  komodo-core:
-    image: ghcr.io/moghtech/komodo-core:latest
-    container_name: komodo-core
+  mongo:
+    image: mongo:7
+    container_name: komodo-mongo
     restart: unless-stopped
+    command: --quiet --wiredTigerCacheSizeGB 0.25
+    labels:
+      komodo.skip: ""
+      wud.watch: "false"
+    env_file:
+      - vars.env
+      - .env
+    volumes:
+      - ./data/db:/data/db
+      - ./data/configdb:/data/configdb
+    networks:
+      - default
+    deploy:
+      resources:
+        limits:
+          cpus: "0.5"
+          memory: 256M
+
+  core:
+    image: ghcr.io/moghtech/komodo-core:2
+    container_name: komodo-core
+    init: true
+    restart: unless-stopped
+    depends_on:
+      - mongo
     env_file:
       - ../../global.env
       - vars.env
+      - .env
+    environment:
+      KOMODO_DATABASE_ADDRESS: mongo:27017
     volumes:
-      - ./data:/etc/komodo
-      - /var/run/docker.sock:/var/run/docker.sock
+      - ./data/keys:/config/keys
+      - ./data/backups:/backups
     networks:
+      - default
       - traefik_internal
     labels:
       - "wud.autoupdate=true"
@@ -25,6 +54,30 @@ services:
         limits:
           cpus: "0.5"
           memory: 256M
+
+  periphery:
+    image: ghcr.io/moghtech/komodo-periphery:2
+    container_name: komodo-periphery
+    init: true
+    restart: unless-stopped
+    depends_on:
+      - core
+    env_file:
+      - ../../global.env
+      - vars.env
+      - .env
+    volumes:
+      - ./data/keys:/config/keys
+      - /var/run/docker.sock:/var/run/docker.sock
+      - /proc:/proc
+      - ./data/periphery:/etc/komodo
+    networks:
+      - default
+    deploy:
+      resources:
+        limits:
+          cpus: "0.25"
+          memory: 128M
 
 networks:
   traefik_internal:
