@@ -2,7 +2,7 @@ name: komodo
 
 services:
   komodo-core:
-    image: ghcr.io/mbecker20/komodo-core:latest
+    image: ghcr.io/moghtech/komodo-core:latest
     container_name: komodo-core
     restart: unless-stopped
     env_file:
