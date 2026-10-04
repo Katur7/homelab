@@ -36,6 +36,7 @@ volumes/
 /services/linguacafe/storage/
 /services/journiv/data/
 /services/komodo/data/
+/services/dozzle/data/
 
 # Gateway — sensitive runtime files only (most config IS git-tracked)
 /infrastructure/gateway/config/acme.json
