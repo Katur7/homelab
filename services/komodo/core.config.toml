@@ -1,0 +1,35 @@
+title = "Komodo"
+host = "https://komodo.internal.pippinn.me"
+port = 9120
+
+## Core <-> Periphery mutual authentication
+private_key = "file:/config/keys/core.key"
+periphery_public_key = "file:/config/keys/periphery.pub"
+
+## Automatically register the local NAS server on first startup
+first_server_name = "NAS"
+
+## Initial Admin User setup
+init_admin_username = "admin"
+# init_admin_password overridden by KOMODO_INIT_ADMIN_PASSWORD in .env
+
+## Authentication & access
+local_auth = true
+disable_user_registration = true
+
+## Database connection (Mongo)
+[database]
+address = "mongo:27017"
+username = "komodo"
+# Password provided via KOMODO_DATABASE_PASSWORD in .env
+db_name = "komodo"
+app_name = "komodo_core"
+
+## Monitoring & resource polling
+monitoring_interval = "15-sec"
+resource_poll_interval = "1-hr"
+
+[logging]
+level = "info"
+stdio = "standard"
+pretty = false
