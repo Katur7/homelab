@@ -210,6 +210,7 @@ Dozzle provides a lightweight, real-time log viewer and container dashboard acro
 * **Networking & Ingress:** Connected to `traefik_internal`, exposed securely at `https://logs.internal.pippinn.me`.
 * **Zero Database Overhead:** Completely stateless; interacts directly with Docker via the UNIX socket (`/var/run/docker.sock`).
 * **Container Actions:** Configured with `DOZZLE_ENABLE_ACTIONS: "true"` to allow one-click container start, stop, and restart directly from the web interface without touching disk files.
+* **Authentication & SSO:** Protected by Authelia via Traefik's `authelia-auth@file` forward-auth middleware and `DOZZLE_AUTH_PROVIDER: forward-proxy`. Uses `./data:/data` to persist user settings and preferences.
 * **Resource Footprint:** Extremely light (~20MB RAM, minimal CPU).
 
 ```yaml
@@ -222,8 +223,10 @@ services:
     restart: unless-stopped
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
+      - ./data:/data
     environment:
       DOZZLE_ENABLE_ACTIONS: "true"
+      DOZZLE_AUTH_PROVIDER: forward-proxy
     networks:
       - traefik_internal
     labels:
@@ -232,6 +235,7 @@ services:
       - "traefik.docker.network=traefik_internal"
       - "traefik.http.routers.dozzle-internal.entrypoints=websecure"
       - "traefik.http.routers.dozzle-internal.rule=Host(`logs.internal.pippinn.me`)"
+      - "traefik.http.routers.dozzle-internal.middlewares=authelia-auth@file"
       - "traefik.http.services.dozzle-internal.loadbalancer.server.port=8080"
     deploy:
       resources:
