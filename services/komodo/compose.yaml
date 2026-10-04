@@ -10,8 +10,9 @@ services:
       komodo.skip: ""
       wud.watch: "false"
     env_file:
-      - vars.env
       - .env
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: komodo
     volumes:
       - ./data/db:/data/db
       - ./data/configdb:/data/configdb
@@ -32,11 +33,9 @@ services:
       - mongo
     env_file:
       - ../../global.env
-      - vars.env
       - .env
-    environment:
-      KOMODO_DATABASE_ADDRESS: mongo:27017
     volumes:
+      - ./core.config.toml:/config/config.toml:ro
       - ./data/keys:/config/keys
       - ./data/backups:/backups
     networks:
@@ -62,11 +61,8 @@ services:
     restart: unless-stopped
     depends_on:
       - core
-    env_file:
-      - ../../global.env
-      - vars.env
-      - .env
     volumes:
+      - ./periphery.config.toml:/config/config.toml:ro
       - ./data/keys:/config/keys
       - /var/run/docker.sock:/var/run/docker.sock
       - /proc:/proc

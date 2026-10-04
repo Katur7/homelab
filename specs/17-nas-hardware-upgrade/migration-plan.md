@@ -206,28 +206,57 @@ sudo systemctl restart smbd
 
 Komodo provides a GitOps-native web interface for inspecting container status, viewing logs, managing compose deployments, and monitoring resource usage across both the NAS and Raspberry Pi.
 
-* **Configuration:** Defined in `services/komodo/compose.yaml` (uses `ghcr.io/mbecker20/komodo-core:latest`).
-* **Networking & Ingress:** Connected to `traefik_internal`, exposed securely at `https://komodo.internal.pippinn.me` (port 9120).
+* **Configuration:** Defined in `services/komodo/compose.yaml` (follows the official Komodo deployment with `mongo:7`, `komodo-core`, and local `komodo-periphery` agent, configured via `core.config.toml` and `periphery.config.toml`).
+* **Architecture:** In Komodo's model, `core` manages the web UI/API and connects to `mongo`, while Docker daemon interaction is delegated to `periphery` over WebSocket (`ws://core:9120`). Core and Periphery authenticate mutually using an asymmetric keypair stored in `./data/keys`.
+* **Networking & Ingress:** Core connects to `traefik_internal` and `default`, exposed securely at `https://komodo.internal.pippinn.me` (port 9120). Mongo and Periphery communicate over the internal bridge network.
 * **DNS:** Added via `./scripts/add-dns.sh komodo`.
-* **State & Persistence:** SQLite database and configuration stored in `./data` (mapped to `/etc/komodo`, gitignored in `.gitignore`).
-* **Docker Access:** Mounts host `/var/run/docker.sock` (read-write) allowing Komodo to start, stop, and restart containers, view logs, and manage deployments.
+* **State & Persistence:** MongoDB stored in `./data/db`, Periphery data in `./data/periphery`, Core/Periphery keys in `./data/keys`, and backups in `./data/backups` (all gitignored under `/services/komodo/data/`).
+* **Configuration & Secrets:** Application configuration resides in `core.config.toml` and `periphery.config.toml` (tracked in Git), while secrets (`MONGO_INITDB_ROOT_PASSWORD`, `KOMODO_DATABASE_PASSWORD`, `KOMODO_INIT_ADMIN_PASSWORD`, `KOMODO_JWT_SECRET`, `KOMODO_WEBHOOK_SECRET`) reside in `services/komodo/.env` (gitignored).
 * **Multi-Node Support:** Allows connecting the Raspberry Pi host via Komodo Periphery agent for a unified single pane of glass.
 
 ```yaml
 name: komodo
 
 services:
-  komodo-core:
-    image: ghcr.io/mbecker20/komodo-core:latest
-    container_name: komodo-core
+  mongo:
+    image: mongo:7
+    container_name: komodo-mongo
     restart: unless-stopped
+    command: --quiet --wiredTigerCacheSizeGB 0.25
+    labels:
+      komodo.skip: ""
+      wud.watch: "false"
+    env_file:
+      - .env
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: komodo
+    volumes:
+      - ./data/db:/data/db
+      - ./data/configdb:/data/configdb
+    networks:
+      - default
+    deploy:
+      resources:
+        limits:
+          cpus: "0.5"
+          memory: 256M
+
+  core:
+    image: ghcr.io/moghtech/komodo-core:2
+    container_name: komodo-core
+    init: true
+    restart: unless-stopped
+    depends_on:
+      - mongo
     env_file:
       - ../../global.env
-      - vars.env
+      - .env
     volumes:
-      - ./data:/etc/komodo
-      - /var/run/docker.sock:/var/run/docker.sock
+      - ./core.config.toml:/config/config.toml:ro
+      - ./data/keys:/config/keys
+      - ./data/backups:/backups
     networks:
+      - default
       - traefik_internal
     labels:
       - "wud.autoupdate=true"
@@ -241,6 +270,27 @@ services:
         limits:
           cpus: "0.5"
           memory: 256M
+
+  periphery:
+    image: ghcr.io/moghtech/komodo-periphery:2
+    container_name: komodo-periphery
+    init: true
+    restart: unless-stopped
+    depends_on:
+      - core
+    volumes:
+      - ./periphery.config.toml:/config/config.toml:ro
+      - ./data/keys:/config/keys
+      - /var/run/docker.sock:/var/run/docker.sock
+      - /proc:/proc
+      - ./data/periphery:/etc/komodo
+    networks:
+      - default
+    deploy:
+      resources:
+        limits:
+          cpus: "0.25"
+          memory: 128M
 
 networks:
   traefik_internal:
@@ -530,28 +580,47 @@ Update `.gitignore` to allow tracked `.env` while strictly ignoring secrets:
      ```bash
      sudo apt update && sudo apt install -y msmtp msmtp-mta bsd-mailx
      ```
-   * Configure `/etc/msmtprc` as the system MTA so `/usr/bin/mail` works globally for SnapRAID error alerts, Fail2Ban, and unattended-upgrades:
+   * Configure `/etc/msmtprc`:
+     ```ini
+     # /etc/msmtprc — System-wide SMTP relay configuration
+     defaults
+     auth           on
+     tls            on
+     tls_trust_file /etc/ssl/certs/ca-certificates.crt
+     syslog         LOG_MAIL
+
+     account        default
+     host           smtp.gmail.com
+     port           587
+     from           grimurk@gmail.com
+     user           grimurk@gmail.com
+     password       <gmail-app-password>
+     ```
+     > [!NOTE]
+     > For Gmail, `<gmail-app-password>` must be a 16-character Google App Password (generated via Google Account → Security → 2-Step Verification → App passwords).
+   * Secure configuration permissions & grant non-root access:
      ```bash
-     sudo cat <<'EOF' > /etc/msmtprc
-# /etc/msmtprc — System-wide SMTP relay configuration
-defaults
-auth           on
-tls            on
-tls_trust_file /etc/ssl/certs/ca-certificates.crt
-logfile        /var/log/msmtp.log
+     # Restrict to root and msmtp group so unprivileged users/services can send mail without sudo
+     sudo chown root:msmtp /etc/msmtprc
+     sudo chmod 640 /etc/msmtprc
+     sudo usermod -aG msmtp grimur
+     newgrp msmtp  # Activate group membership in current session without relogging
+     ```
+   * Verify system MTA symlink:
+     ```bash
+     ls -l /usr/sbin/sendmail
+     # Should point to /usr/bin/msmtp
+     ```
+   * Test email delivery (run as regular user `grimur` without `sudo`):
+     ```bash
+     # Test via verbose msmtp command (shows SMTP handshake / auth)
+     printf "Subject: Test from msmtp\n\nThis is a test email." | msmtp -v grimurk@gmail.com
 
-account        default
-host           smtp.gmail.com
-port           587
-from           grimurk@gmail.com
-user           grimurk@gmail.com
-password       <gmail-app-password>
-EOF
-     sudo chmod 600 /etc/msmtprc
-     sudo touch /var/log/msmtp.log && sudo chmod 666 /var/log/msmtp.log
-
-     # Test email delivery:
+     # Test via mail wrapper
      echo "Test mail from pippinn NAS" | mail -s "Test Email" grimurk@gmail.com
+
+     # Inspect delivery log in systemd journal
+     journalctl -t msmtp -n 10
      ```
 
 8. **Install & Configure Fail2Ban for SSH (with Ban-Only Email Alerts):**
@@ -559,59 +628,65 @@ EOF
      ```bash
      sudo apt update && sudo apt install -y fail2ban whois
      ```
-   * Protects SSH from brute-force connection floods while emailing detailed ban reports with WHOIS information (suppressing start/stop reboot noise, per Milestone 07.4):
-     1. Create the ban-only action override in `/etc/fail2ban/action.d/sendmail-whois-lines-banonly.conf`:
-        ```bash
-        sudo cat <<'EOF' > /etc/fail2ban/action.d/sendmail-whois-lines-banonly.conf
-[INCLUDES]
-before = sendmail-whois-lines.conf
+   * Protects SSH from brute-force connection floods while emailing detailed ban reports with WHOIS information (suppressing start/stop reboot noise, per Milestone 07.4).
+   * Create ban-only action override in `/etc/fail2ban/action.d/sendmail-whois-lines-banonly.conf`:
+     ```ini
+     [INCLUDES]
+     before = sendmail-whois-lines.conf
 
-[Definition]
-actionstart =
-actionstop =
-EOF
-        ```
-     2. Create `/etc/fail2ban/jail.local`:
-        ```bash
-        sudo cat <<'EOF' > /etc/fail2ban/jail.local
-[DEFAULT]
-backend = systemd
-bantime = 1h
-findtime = 10m
-maxretry = 5
-ignoreip = 127.0.0.1/8 ::1 192.168.86.0/24
+     [Definition]
+     actionstart =
+     actionstop =
+     ```
+   * Configure `/etc/fail2ban/jail.local`:
+     ```ini
+     [DEFAULT]
+     backend = systemd
+     bantime = 1h
+     findtime = 10m
+     maxretry = 5
+     ignoreip = 127.0.0.1/8 ::1 192.168.86.0/24
 
-destemail = grimurk@gmail.com
-sender = grimurk@gmail.com
-mta = mail
+     destemail = grimurk@gmail.com
+     sender = grimurk@gmail.com
+     mta = mail
 
-# Block IP at firewall and send detailed email on ban
-action = %(banaction)s[name=%(__name__)s, port="%(port)s", protocol="%(protocol)s", chain="%(chain)s"]
-         sendmail-whois-lines-banonly[name=%(__name__)s, dest="%(destemail)s", chain="%(chain)s", sender="%(sender)s"]
+     # Block IP at firewall and send detailed email on ban
+     action = %(banaction)s[name=%(__name__)s, port="%(port)s", protocol="%(protocol)s", chain="%(chain)s"]
+              sendmail-whois-lines-banonly[name=%(__name__)s, dest="%(destemail)s", chain="%(chain)s", sender="%(sender)s"]
 
-[sshd]
-enabled = true
-port = ssh
-EOF
-        ```
-     3. Enable and start Fail2Ban:
-        ```bash
-        sudo systemctl enable --now fail2ban
-        sudo fail2ban-client status sshd
-        ```
+     [sshd]
+     enabled = true
+     port = ssh
+     ```
+   * Enable and start Fail2Ban:
+     ```bash
+     sudo systemctl enable --now fail2ban
+     sudo fail2ban-client status sshd
+     ```
 
 9. **Deploy Komodo Management UI:**
    * Add internal DNS entry for Komodo:
      ```bash
      ./scripts/add-dns.sh komodo
      ```
-   * Bring up the Komodo service:
+   * Populate secrets in `services/komodo/.env`:
      ```bash
+     DB_PASS=$(openssl rand -hex 16)
+     ADMIN_PASS=$(openssl rand -hex 16)
+     printf "MONGO_INITDB_ROOT_PASSWORD=%s\nKOMODO_DATABASE_PASSWORD=%s\nKOMODO_INIT_ADMIN_PASSWORD=%s\nKOMODO_JWT_SECRET=%s\nKOMODO_WEBHOOK_SECRET=%s\n" \
+       "$DB_PASS" "$DB_PASS" "$ADMIN_PASS" "$(openssl rand -hex 32)" "$(openssl rand -hex 32)" > services/komodo/.env
+     chmod 600 services/komodo/.env
+     echo "Initial Komodo Admin Password: $ADMIN_PASS"
+     ```
+   * Pull images and bring up the Komodo stack:
+     ```bash
+     docker compose -f services/komodo/compose.yaml pull
      docker compose -f services/komodo/compose.yaml up -d
      ```
    * Open `https://komodo.internal.pippinn.me` in your browser.
-   * Create the initial administrator username and password.
-   * Confirm the local Docker daemon is recognized via `/var/run/docker.sock` and lists all running homelab containers.
+   * Log in with username `admin` and the password output above (stored in `services/komodo/.env`).
+   * Confirm the local `NAS` server is automatically recognized via Periphery and lists all running homelab containers.
    * *(Optional)* To manage the Raspberry Pi from the same interface, deploy Komodo Periphery on the Pi and add it as a server in Komodo Core.
 
 10. **Verify Beszel Agent & Configure Email Notifications:**
