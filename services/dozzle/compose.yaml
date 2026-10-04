@@ -1,0 +1,29 @@
+name: dozzle
+
+services:
+  dozzle:
+    image: amir20/dozzle:latest
+    container_name: dozzle
+    restart: unless-stopped
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    environment:
+      DOZZLE_ENABLE_ACTIONS: "true"
+    networks:
+      - traefik_internal
+    labels:
+      - "wud.autoupdate=true"
+      - "traefik.enable=true"
+      - "traefik.docker.network=traefik_internal"
+      - "traefik.http.routers.dozzle-internal.entrypoints=websecure"
+      - "traefik.http.routers.dozzle-internal.rule=Host(`logs.internal.pippinn.me`)"
+      - "traefik.http.services.dozzle-internal.loadbalancer.server.port=8080"
+    deploy:
+      resources:
+        limits:
+          cpus: "0.25"
+          memory: 64M
+
+networks:
+  traefik_internal:
+    external: true

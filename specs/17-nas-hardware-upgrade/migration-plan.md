@@ -14,7 +14,7 @@
 | **Networking** | **`systemd-networkd`** | Native, lightweight static IP configuration (`192.168.86.17/24`) with hostname `pippinn` retained for Tailscale, DNS, and Uptime Kuma continuity. |
 | **SnapRAID Automation** | **Systemd Service & Timer (`scripts/`)** | Replaces OMV GUI plugin. Nightly sync with safety delete-threshold check and notification hook, plus weekly scrub. |
 | **GPU Drivers & Acceleration** | **Pre-installed Intel VA-API non-free** | `intel-microcode`, `intel-media-va-driver-non-free`, and `vainfo` configured in Phase 2; `grimur` in `render` and `video` groups. |
-| **Docker Management UI** | **Komodo** | GitOps-native, modern mobile-friendly web UI for restarting/monitoring containers, and multi-node support (manages both NAS and Raspberry Pi). |
+| **Docker Management UI** | **Dozzle** | Lightweight, stateless web UI for real-time container log streaming, memory/CPU monitoring, and one-click container lifecycle management (start/stop/restart) exposed at `logs.internal.pippinn.me`. |
 | **Drive Health & Alerts** | **Beszel S.M.A.R.T. (Native)** | Built into existing Beszel fleet (`monitoring.internal.pippinn.me`). Tracks drive health, temperatures, wear, and failure alerts with email notifications without running a heavy separate Scrutiny/InfluxDB stack. |
 | **Secrets & Env Architecture** | **`.env` (Tracked) + `.secret.env` (Ignored)** | Retires the confusing `vars.env` pattern. `.env` is tracked in Git for non-sensitive configuration and native Docker Compose template interpolation (`${TAG}`, `${PORT}`). Actual credentials are isolated to gitignored `*.secret.env`. |
 
@@ -200,97 +200,44 @@ sudo systemctl restart smbd
 
 ---
 
-## 3. Management & Monitoring Services (Komodo & Beszel)
+## 3. Management & Monitoring Services (Dozzle & Beszel)
 
-### 3.1 Komodo (Docker UI & Multi-Node Manager)
+### 3.1 Dozzle (Real-time Container Logs & Lifecycle Management)
 
-Komodo provides a GitOps-native web interface for inspecting container status, viewing logs, managing compose deployments, and monitoring resource usage across both the NAS and Raspberry Pi.
+Dozzle provides a lightweight, real-time log viewer and container dashboard across all Docker services running on the host.
 
-* **Configuration:** Defined in `services/komodo/compose.yaml` (follows the official Komodo deployment with `mongo:7`, `komodo-core`, and local `komodo-periphery` agent, configured via `core.config.toml` and `periphery.config.toml`).
-* **Architecture:** In Komodo's model, `core` manages the web UI/API and connects to `mongo`, while Docker daemon interaction is delegated to `periphery` over WebSocket (`ws://core:9120`). Core and Periphery authenticate mutually using an asymmetric keypair stored in `./data/keys`.
-* **Networking & Ingress:** Core connects to `traefik_internal` and `default`, exposed securely at `https://komodo.internal.pippinn.me` (port 9120). Mongo and Periphery communicate over the internal bridge network.
-* **DNS:** Added via `./scripts/add-dns.sh komodo`.
-* **State & Persistence:** MongoDB stored in `./data/db`, Periphery data in `./data/periphery`, Core/Periphery keys in `./data/keys`, and backups in `./data/backups` (all gitignored under `/services/komodo/data/`).
-* **Configuration & Secrets:** Application configuration resides in `core.config.toml` and `periphery.config.toml` (tracked in Git), while secrets (`MONGO_INITDB_ROOT_PASSWORD`, `KOMODO_DATABASE_PASSWORD`, `KOMODO_INIT_ADMIN_PASSWORD`, `KOMODO_JWT_SECRET`, `KOMODO_WEBHOOK_SECRET`) reside in `services/komodo/.env` (gitignored).
-* **Multi-Node Support:** Allows connecting the Raspberry Pi host via Komodo Periphery agent for a unified single pane of glass.
+* **Configuration:** Defined in `services/dozzle/compose.yaml` (uses `amir20/dozzle:latest`).
+* **Networking & Ingress:** Connected to `traefik_internal`, exposed securely at `https://logs.internal.pippinn.me`.
+* **Zero Database Overhead:** Completely stateless; interacts directly with Docker via the UNIX socket (`/var/run/docker.sock`).
+* **Container Actions:** Configured with `DOZZLE_ENABLE_ACTIONS: "true"` to allow one-click container start, stop, and restart directly from the web interface without touching disk files.
+* **Resource Footprint:** Extremely light (~20MB RAM, minimal CPU).
 
 ```yaml
-name: komodo
+name: dozzle
 
 services:
-  mongo:
-    image: mongo:7
-    container_name: komodo-mongo
+  dozzle:
+    image: amir20/dozzle:latest
+    container_name: dozzle
     restart: unless-stopped
-    command: --quiet --wiredTigerCacheSizeGB 0.25
-    labels:
-      komodo.skip: ""
-      wud.watch: "false"
-    env_file:
-      - .env
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
     environment:
-      MONGO_INITDB_ROOT_USERNAME: komodo
-    volumes:
-      - ./data/db:/data/db
-      - ./data/configdb:/data/configdb
+      DOZZLE_ENABLE_ACTIONS: "true"
     networks:
-      - default
-    deploy:
-      resources:
-        limits:
-          cpus: "0.5"
-          memory: 256M
-
-  core:
-    image: ghcr.io/moghtech/komodo-core:2
-    container_name: komodo-core
-    init: true
-    restart: unless-stopped
-    depends_on:
-      - mongo
-    env_file:
-      - ../../global.env
-      - .env
-    volumes:
-      - ./core.config.toml:/config/config.toml:ro
-      - ./data/keys:/config/keys
-      - ./data/backups:/backups
-    networks:
-      - default
       - traefik_internal
     labels:
       - "wud.autoupdate=true"
       - "traefik.enable=true"
       - "traefik.docker.network=traefik_internal"
-      - "traefik.http.routers.komodo.rule=Host(`komodo.internal.pippinn.me`)"
-      - "traefik.http.routers.komodo.entrypoints=websecure"
-      - "traefik.http.services.komodo.loadbalancer.server.port=9120"
-    deploy:
-      resources:
-        limits:
-          cpus: "0.5"
-          memory: 256M
-
-  periphery:
-    image: ghcr.io/moghtech/komodo-periphery:2
-    container_name: komodo-periphery
-    init: true
-    restart: unless-stopped
-    depends_on:
-      - core
-    volumes:
-      - ./periphery.config.toml:/config/config.toml:ro
-      - ./data/keys:/config/keys
-      - /var/run/docker.sock:/var/run/docker.sock
-      - /proc:/proc
-      - ./data/periphery:/etc/komodo
-    networks:
-      - default
+      - "traefik.http.routers.dozzle-internal.entrypoints=websecure"
+      - "traefik.http.routers.dozzle-internal.rule=Host(`logs.internal.pippinn.me`)"
+      - "traefik.http.services.dozzle-internal.loadbalancer.server.port=8080"
     deploy:
       resources:
         limits:
           cpus: "0.25"
-          memory: 128M
+          memory: 64M
 
 networks:
   traefik_internal:
@@ -665,29 +612,15 @@ Update `.gitignore` to allow tracked `.env` while strictly ignoring secrets:
      sudo fail2ban-client status sshd
      ```
 
-9. **Deploy Komodo Management UI:**
-   * Add internal DNS entry for Komodo:
+9. **Deploy Dozzle Dashboard (`logs.internal.pippinn.me`):**
+   * Bring up the Dozzle container:
      ```bash
-     ./scripts/add-dns.sh komodo
+     docker compose -f services/dozzle/compose.yaml pull
+     docker compose -f services/dozzle/compose.yaml up -d
      ```
-   * Populate secrets in `services/komodo/.env`:
-     ```bash
-     DB_PASS=$(openssl rand -hex 16)
-     ADMIN_PASS=$(openssl rand -hex 16)
-     printf "MONGO_INITDB_ROOT_PASSWORD=%s\nKOMODO_DATABASE_PASSWORD=%s\nKOMODO_INIT_ADMIN_PASSWORD=%s\nKOMODO_JWT_SECRET=%s\nKOMODO_WEBHOOK_SECRET=%s\n" \
-       "$DB_PASS" "$DB_PASS" "$ADMIN_PASS" "$(openssl rand -hex 32)" "$(openssl rand -hex 32)" > services/komodo/.env
-     chmod 600 services/komodo/.env
-     echo "Initial Komodo Admin Password: $ADMIN_PASS"
-     ```
-   * Pull images and bring up the Komodo stack:
-     ```bash
-     docker compose -f services/komodo/compose.yaml pull
-     docker compose -f services/komodo/compose.yaml up -d
-     ```
-   * Open `https://komodo.internal.pippinn.me` in your browser.
-   * Log in with username `admin` and the password output above (stored in `services/komodo/.env`).
-   * Confirm the local `NAS` server is automatically recognized via Periphery and lists all running homelab containers.
-   * *(Optional)* To manage the Raspberry Pi from the same interface, deploy Komodo Periphery on the Pi and add it as a server in Komodo Core.
+   * Open `https://logs.internal.pippinn.me` in your browser.
+   * Verify all running and stopped containers appear immediately with live logs, stats, and start/stop/restart action buttons.
+   * *(Optional)* To monitor the Raspberry Pi in the same view, deploy a Dozzle agent container on the Pi.
 
 10. **Verify Beszel Agent & Configure Email Notifications:**
    * Verify Beszel Agent container status:

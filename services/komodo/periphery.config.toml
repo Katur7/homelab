@@ -1,5 +1,0 @@
-root_directory = "/etc/komodo"
-core_address = "ws://core:9120"
-connect_as = "NAS"
-core_public_keys = ["file:/config/keys/core.pub"]
-include_disk_mounts = ["/etc/hostname"]
