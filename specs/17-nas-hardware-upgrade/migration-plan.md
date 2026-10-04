@@ -7,7 +7,7 @@
 | **Migration Approach** | **2-Phase Migration (Swap first, M.2 NVMe fresh OS)** | Isolates hardware validation from OS configuration. The existing Plextor SSD serves as a 100% working fallback during the transition. |
 | **Base Operating System** | **Debian 12 (Bookworm) Minimal / Server** | Zero hypervisor tax, ~150MB idle RAM, direct access to Intel QuickSync GPU (`/dev/dri`), maximum stability for Docker GitOps. |
 | **Host Identity & Fleet Parity** | **`grimur` (UID 1000, GID 1000)** | Full parity with Raspberry Pi (`ssh grimur@...`, `/home/grimur/homelab`). Replaces OMV's legacy `PGID=100` with standard Linux User Private Groups (`PGID=1000`). Supplementary group `users` (GID 100) retained for compatibility. |
-| **Host Hardening** | **Key-Only SSH & Unattended Upgrades** | Parity with Pi Milestone 08.3: `PasswordAuthentication no`, `PermitRootLogin no`, `unattended-upgrades` active, journald capped at 1GB. |
+| **Host Hardening** | **Key-Only SSH, Fail2Ban & Unattended Upgrades** | Parity with Pi Milestone 08.3 & OMV 07.4: `PasswordAuthentication no`, `PermitRootLogin no`, Fail2Ban SSH jail with ban-only email alerts, `unattended-upgrades` active, journald capped at 1GB. |
 | **Storage Architecture** | **MergerFS + SnapRAID** | Pools data drives into `/mnt/storage` for unified capacity and atomic hardlinks for Starr apps, while preserving disk-level SnapRAID parity protection. |
 | **Storage Permissions** | **SetGID (`chmod 2775`) on `/mnt/storage`** | Owned by `grimur:grimur` with `umask=002` in MergerFS. New files/subfolders automatically inherit group write access across Docker (PUID/PGID 1000), SSH, and Samba. |
 | **Network File Sharing** | **Samba (`smb.conf`)** | Authenticated user `grimur` for full read/write access. Read-only guest access for media streaming to smart TVs / media players. |
@@ -15,7 +15,7 @@
 | **SnapRAID Automation** | **Systemd Service & Timer (`scripts/`)** | Replaces OMV GUI plugin. Nightly sync with safety delete-threshold check and notification hook, plus weekly scrub. |
 | **GPU Drivers & Acceleration** | **Pre-installed Intel VA-API non-free** | `intel-microcode`, `intel-media-va-driver-non-free`, and `vainfo` configured in Phase 2; `grimur` in `render` and `video` groups. |
 | **Docker Management UI** | **Komodo** | GitOps-native, modern mobile-friendly web UI for restarting/monitoring containers, and multi-node support (manages both NAS and Raspberry Pi). |
-| **Drive Health & Alerts** | **Beszel S.M.A.R.T. (Native)** | Built into existing Beszel fleet (`monitoring.internal.pippinn.me`). Tracks drive health, temperatures, wear, and routes failure alerts through your existing Home Assistant alert pipeline without running a heavy separate Scrutiny/InfluxDB stack. |
+| **Drive Health & Alerts** | **Beszel S.M.A.R.T. (Native)** | Built into existing Beszel fleet (`monitoring.internal.pippinn.me`). Tracks drive health, temperatures, wear, and failure alerts with email notifications without running a heavy separate Scrutiny/InfluxDB stack. |
 | **Secrets & Env Architecture** | **`.env` (Tracked) + `.secret.env` (Ignored)** | Retires the confusing `vars.env` pattern. `.env` is tracked in Git for non-sensitive configuration and native Docker Compose template interpolation (`${TAG}`, `${PORT}`). Actual credentials are isolated to gitignored `*.secret.env`. |
 
 ---
@@ -149,33 +149,54 @@ sudo systemctl restart smbd
 
 ### 2.5 SnapRAID Configuration & Automated Timers
 
-1. Configure `/etc/snapraid.conf`:
+1. Configure `/etc/snapraid.conf` (preserving array layout and exclude lists from OMV):
    ```text
+   # SnapRAID Configuration for pippinn NAS
+   # Parity disk (UUID 9e6b2fd0-7b7e-4045-bd96-c2e925089d1a)
    parity /srv/parity1/snapraid.parity
+
+   # Content list files (1 on root SSD + 1 on each data disk)
    content /var/snapraid.content
    content /srv/disk1/.snapraid.content
    content /srv/disk2/.snapraid.content
    content /srv/disk3/.snapraid.content
 
+   # Data disks
    data d1 /srv/disk1/
    data d2 /srv/disk2/
    data d3 /srv/disk3/
 
+   # Excludes (retained from OMV array configuration)
    exclude *.unrecoverable
+   exclude lost+found/
+   exclude aquota.user
+   exclude aquota.group
    exclude /tmp/
-   exclude /lost+found/
+   exclude .content
+   exclude *.bak
+   exclude /snapraid.conf*
+   exclude /photos/thumbs/
+   exclude /code/
+   exclude /photos/encoded-video/
+   exclude /backup/borg/
+   exclude /backup/borg2/
+   exclude /backup/omv-backup/
+   exclude /syncthing/.stversions/
    exclude *.!sync
    exclude .DS_Store
    exclude Thumbs.db
    ```
 
-2. Automation via `scripts/snapraid-sync.sh`:
-   * Checks `snapraid diff` before running sync.
-   * Enforces a deletion threshold (e.g. aborts if >50 files were deleted unless overridden).
-   * Runs `snapraid sync`.
-   * Sends an alert notification if errors occur.
-   * Managed via `snapraid-sync.service` and `snapraid-sync.timer` (running daily at 04:00).
-   * Weekly scrub managed via `snapraid-scrub.timer` (running Sundays at 05:00 with `snapraid scrub -p 5`).
+2. Automation via `scripts/snapraid-sync.sh` and `scripts/snapraid-scrub.sh`:
+   * **Mountpoint Safety Verification:** Checks that all underlying disk paths (`/srv/disk1`, `/srv/disk2`, `/srv/disk3`, `/srv/parity1`) are active mountpoints (`mountpoint -q`) before running any SnapRAID commands. Prevents disastrous parity corruption if an unmounted disk appears empty.
+   * **Pre-Sync Diff & Deletion Threshold:** Runs `snapraid diff` and parses the count of removed files. If deletions exceed `DEL_THRESHOLD` (default: 50 files), the script aborts with an alert to protect against accidental mass deletions.
+   * **Threshold Override:** Can be bypassed via `--force` CLI argument or by creating the flag file `touch /tmp/snapraid-sync.force`.
+   * **Error-Only Email Alerts:** Sends an immediate alert email (using `msmtp` / `mail` configured in `/etc/msmtprc`) with the error output, diff summary, and exit code if a sync or scrub fails, or if the deletion threshold is exceeded. Successful daily runs remain silent.
+   * **Uptime Kuma Heartbeat Push Monitors:**
+     - `snapraid-sync`: Expected daily (interval 25 hours). Dead-man's switch triggered if sync fails to run or complete.
+     - `snapraid-scrub`: Expected weekly (interval 8 days). Dead-man's switch triggered if weekly Sunday scrub fails to run or complete.
+   * **Weekly Scrub (`scripts/snapraid-scrub.sh`):** Runs `snapraid scrub -p 5 -o 10` (scrubs 5% of array older than 10 days) with mount safety checks, error emails, and scrub heartbeat ping.
+   * **Systemd Timers:** Managed via `snapraid-sync.timer` (daily at 04:00) and `snapraid-scrub.timer` (Sundays at 05:00). Installed via `scripts/setup-snapraid-maintenance.sh`.
 
 ---
 
@@ -183,7 +204,15 @@ sudo systemctl restart smbd
 
 ### 3.1 Komodo (Docker UI & Multi-Node Manager)
 
-Add `services/komodo/compose.yaml`:
+Komodo provides a GitOps-native web interface for inspecting container status, viewing logs, managing compose deployments, and monitoring resource usage across both the NAS and Raspberry Pi.
+
+* **Configuration:** Defined in `services/komodo/compose.yaml` (uses `ghcr.io/mbecker20/komodo-core:latest`).
+* **Networking & Ingress:** Connected to `traefik_internal`, exposed securely at `https://komodo.internal.pippinn.me` (port 9120).
+* **DNS:** Added via `./scripts/add-dns.sh komodo`.
+* **State & Persistence:** SQLite database and configuration stored in `./data` (mapped to `/etc/komodo`, gitignored in `.gitignore`).
+* **Docker Access:** Mounts host `/var/run/docker.sock` (read-write) allowing Komodo to start, stop, and restart containers, view logs, and manage deployments.
+* **Multi-Node Support:** Allows connecting the Raspberry Pi host via Komodo Periphery agent for a unified single pane of glass.
+
 ```yaml
 name: komodo
 
@@ -195,63 +224,54 @@ services:
     env_file:
       - ../../global.env
       - vars.env
-      - .env
     volumes:
       - ./data:/etc/komodo
-      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - /var/run/docker.sock:/var/run/docker.sock
     networks:
       - traefik_internal
     labels:
+      - "wud.autoupdate=true"
       - "traefik.enable=true"
       - "traefik.docker.network=traefik_internal"
       - "traefik.http.routers.komodo.rule=Host(`komodo.internal.pippinn.me`)"
       - "traefik.http.routers.komodo.entrypoints=websecure"
       - "traefik.http.services.komodo.loadbalancer.server.port=9120"
+    deploy:
+      resources:
+        limits:
+          cpus: "0.5"
+          memory: 256M
 
 networks:
   traefik_internal:
     external: true
 ```
 
-### 3.2 Beszel Agent: Enable Native S.M.A.R.T. Monitoring
+### 3.2 Beszel: Native S.M.A.R.T. Monitoring & Email Alerts
 
-Instead of running a separate Scrutiny stack with InfluxDB (~300MB RAM), enhance the existing [services/beszel-agent/compose.yaml](file:///Users/grimur/personal-code/homelab/services/beszel-agent/compose.yaml) to use the `:alpine` image (bundles `smartmontools`) with raw I/O disk capabilities:
+Instead of running a heavy separate Scrutiny + InfluxDB stack (~300MB RAM), Beszel agent on the NAS is upgraded to `henrygd/beszel-agent:alpine` (which bundles `smartmontools`) with raw drive passthrough to deliver lightweight (~15MB RAM) drive health, temperature, and wear monitoring.
 
-```yaml
-name: beszel-agent
+#### Beszel Agent Architecture (`services/beszel-agent/compose.yaml`)
+* **Host Access:** `network_mode: host` for accurate NIC and network metrics.
+* **Capabilities:** `SYS_RAWIO` (SATA S.M.A.R.T.) and `SYS_ADMIN` (NVMe S.M.A.R.T.).
+* **Device Nodes:** Passthrough for `/dev/sda`, `/dev/sdb`, `/dev/sdc`, `/dev/sdd`, `/dev/sde`, and `/dev/nvme0n1`.
+* **Udev:** Mounts `/run/udev:ro` for device identification and disk serials.
 
-services:
-  beszel-agent:
-    image: henrygd/beszel-agent:alpine
-    container_name: beszel-agent
-    restart: unless-stopped
-    network_mode: host
-    cap_add:
-      - SYS_RAWIO    # Access SATA S.M.A.R.T.
-      - SYS_ADMIN    # Access NVMe S.M.A.R.T.
-    devices:
-      - /dev/sda:/dev/sda
-      - /dev/sdb:/dev/sdb
-      - /dev/sdc:/dev/sdc
-      - /dev/sdd:/dev/sdd
-      - /dev/nvme0n1:/dev/nvme0n1
-    volumes:
-      - /var/run/docker.sock:/var/run/docker.sock:ro
-      - ./beszel_agent_data:/var/lib/beszel-agent
-    environment:
-      LISTEN: 45876
-      KEY: ${BESZEL_AGENT_KEY_NAS}
-      TOKEN: ${BESZEL_AGENT_TOKEN_NAS}
-      HUB_URL: http://192.168.86.26:8090
-    deploy:
-      resources:
-        limits:
-          cpus: "0.1"
-          memory: 48M
-```
+#### Alerting Pipeline
+Beszel Hub (running on the Raspberry Pi at `192.168.86.26:8090`) routes alerts directly to email via its built-in notification settings (**Settings ➔ Notifications**):
 
-> [!TIP]
-> **Unified Alerting:** S.M.A.R.T. health status, drive temperatures, and failure alerts automatically flow through your existing Beszel Hub ➔ Home Assistant alert integration established in [Spec 11](file:///Users/grimur/personal-code/homelab/specs/11-monitoring/summary.md).
+1. **Email Configuration (SMTP):**
+   Configured in Beszel Hub UI using your SMTP provider (or Shoutrrr SMTP URL):
+   ```text
+   smtp://grimurk%40gmail.com:<gmail-app-password>@smtp.gmail.com:587/?fromaddress=grimurk@gmail.com&toaddresses=grimurk@gmail.com
+   ```
+
+2. **Configured Alert Rules in Beszel Hub:**
+   * **Drive S.M.A.R.T. Status:** Immediate alert if any drive reports degraded health or pre-fail attributes.
+   * **HDD Temperature:** Alert if any mechanical drive exceeds 45°C.
+   * **NVMe Temperature:** Alert if the NVMe system drive exceeds 70°C.
+   * **Disk Space Usage:** Alert if any filesystem exceeds 90% utilization.
+   * **Host Availability:** Alert if NAS or Pi agent disconnects for >5 minutes.
 
 ---
 
@@ -417,10 +437,30 @@ Update `.gitignore` to allow tracked `.env` while strictly ignoring secrets:
      ```
 
 5. **Storage, Mounts & Permissions:**
-   * Create mount points: `/srv/disk1`, `/srv/disk2`, `/srv/disk3`, `/srv/parity1`, `/mnt/storage`.
-   * Populate `/etc/fstab` with drive UUIDs and MergerFS pool (Section 2.2).
-   * Configure `/etc/fuse.conf` (`user_allow_other`).
-   * Mount all filesystems: `sudo mount -a`.
+   * Create mount points:
+     ```bash
+     sudo mkdir -p /srv/{disk1,disk2,disk3,parity1} /mnt/storage
+     ```
+   * Populate `/etc/fstab` with drive UUIDs and MergerFS pool:
+     ```text
+     # Underlying physical drives (mount by UUID)
+     UUID=220b73c9-2682-4822-b871-cb499733b15b   /srv/disk1    ext4   defaults,noatime   0 2
+     UUID=0ddafbf7-f06d-424d-8e9c-95d97fbd4484   /srv/disk2    ext4   defaults,noatime   0 2
+     UUID=f1209e02-5b26-491f-ac40-f951e9ddfbb0   /srv/disk3    ext4   defaults,noatime   0 2
+     UUID=9e6b2fd0-7b7e-4045-bd96-c2e925089d1a   /srv/parity1  ext4   defaults,noatime   0 2
+
+     # MergerFS Unified Storage Pool
+     /srv/disk*          /mnt/storage  fuse.mergerfs  defaults,nonempty,allow_other,use_ino,cache.files=partial,category.create=mfs,minfreespace=50G,fsname=mergerfs,umask=002,x-systemd.requires-mounts-for=/srv/disk1,x-systemd.requires-mounts-for=/srv/disk2,x-systemd.requires-mounts-for=/srv/disk3  0 0
+     ```
+   * Configure `/etc/fuse.conf`:
+     ```bash
+     sudo sed -i 's/#user_allow_other/user_allow_other/' /etc/fuse.conf
+     ```
+   * Mount all filesystems and verify:
+     ```bash
+     sudo mount -a
+     df -h /mnt/storage /srv/disk* /srv/parity1
+     ```
    * Apply SetGID directory permissions:
      ```bash
      sudo chown -R grimur:grimur /mnt/storage
@@ -430,8 +470,13 @@ Update `.gitignore` to allow tracked `.env` while strictly ignoring secrets:
      ```bash
      sudo chown -R grimur:grimur /srv/disk1 /srv/disk2 /srv/disk3
      ```
-   * Configure Samba (`/etc/samba/smb.conf`) and set `grimur` SMB password.
-   * Recreate `/etc/snapraid.conf` pointing to `/srv/disk*` and `/srv/parity1`.
+   * Configure Samba (`/etc/samba/smb.conf`) and set `grimur` SMB password:
+     ```bash
+     sudo smbpasswd -a grimur
+     sudo smbpasswd -e grimur
+     sudo systemctl restart smbd
+     ```
+   * Deploy `/etc/snapraid.conf` (Section 2.5).
 
 6. **GitOps Deployment & Service Bring-Up:**
    * Clone repo to `/home/grimur/homelab`.
@@ -467,10 +512,127 @@ Update `.gitignore` to allow tracked `.env` while strictly ignoring secrets:
      ```bash
      sudo /home/grimur/homelab/scripts/setup-docker-maintenance.sh
      ```
-   * Start homelab stack:
+   * Bring up core infrastructure stacks first (creates `traefik_internal` and core networks):
      ```bash
-     ./scripts/homelab-up.sh
+     docker compose -f infrastructure/gateway/compose.yaml up -d
+     docker compose -f infrastructure/dns/compose.yaml up -d
+     docker compose -f infrastructure/tailscale/compose.yaml up -d
      ```
+   * Bring up remaining service stacks:
+     ```bash
+     for dir in services/*/; do
+       [ -f "${dir}compose.yaml" ] && docker compose -f "${dir}compose.yaml" up -d
+     done
+     ```
+
+7. **Configure Host Email Relay (`msmtp`):**
+   * Install lightweight mail relay packages:
+     ```bash
+     sudo apt update && sudo apt install -y msmtp msmtp-mta bsd-mailx
+     ```
+   * Configure `/etc/msmtprc` as the system MTA so `/usr/bin/mail` works globally for SnapRAID error alerts, Fail2Ban, and unattended-upgrades:
+     ```bash
+     sudo cat <<'EOF' > /etc/msmtprc
+# /etc/msmtprc — System-wide SMTP relay configuration
+defaults
+auth           on
+tls            on
+tls_trust_file /etc/ssl/certs/ca-certificates.crt
+logfile        /var/log/msmtp.log
+
+account        default
+host           smtp.gmail.com
+port           587
+from           grimurk@gmail.com
+user           grimurk@gmail.com
+password       <gmail-app-password>
+EOF
+     sudo chmod 600 /etc/msmtprc
+     sudo touch /var/log/msmtp.log && sudo chmod 666 /var/log/msmtp.log
+
+     # Test email delivery:
+     echo "Test mail from pippinn NAS" | mail -s "Test Email" grimurk@gmail.com
+     ```
+
+8. **Install & Configure Fail2Ban for SSH (with Ban-Only Email Alerts):**
+   * Install Fail2Ban and WHOIS utility:
+     ```bash
+     sudo apt update && sudo apt install -y fail2ban whois
+     ```
+   * Protects SSH from brute-force connection floods while emailing detailed ban reports with WHOIS information (suppressing start/stop reboot noise, per Milestone 07.4):
+     1. Create the ban-only action override in `/etc/fail2ban/action.d/sendmail-whois-lines-banonly.conf`:
+        ```bash
+        sudo cat <<'EOF' > /etc/fail2ban/action.d/sendmail-whois-lines-banonly.conf
+[INCLUDES]
+before = sendmail-whois-lines.conf
+
+[Definition]
+actionstart =
+actionstop =
+EOF
+        ```
+     2. Create `/etc/fail2ban/jail.local`:
+        ```bash
+        sudo cat <<'EOF' > /etc/fail2ban/jail.local
+[DEFAULT]
+backend = systemd
+bantime = 1h
+findtime = 10m
+maxretry = 5
+ignoreip = 127.0.0.1/8 ::1 192.168.86.0/24
+
+destemail = grimurk@gmail.com
+sender = grimurk@gmail.com
+mta = mail
+
+# Block IP at firewall and send detailed email on ban
+action = %(banaction)s[name=%(__name__)s, port="%(port)s", protocol="%(protocol)s", chain="%(chain)s"]
+         sendmail-whois-lines-banonly[name=%(__name__)s, dest="%(destemail)s", chain="%(chain)s", sender="%(sender)s"]
+
+[sshd]
+enabled = true
+port = ssh
+EOF
+        ```
+     3. Enable and start Fail2Ban:
+        ```bash
+        sudo systemctl enable --now fail2ban
+        sudo fail2ban-client status sshd
+        ```
+
+9. **Deploy Komodo Management UI:**
+   * Add internal DNS entry for Komodo:
+     ```bash
+     ./scripts/add-dns.sh komodo
+     ```
+   * Bring up the Komodo service:
+     ```bash
+     docker compose -f services/komodo/compose.yaml up -d
+     ```
+   * Open `https://komodo.internal.pippinn.me` in your browser.
+   * Create the initial administrator username and password.
+   * Confirm the local Docker daemon is recognized via `/var/run/docker.sock` and lists all running homelab containers.
+   * *(Optional)* To manage the Raspberry Pi from the same interface, deploy Komodo Periphery on the Pi and add it as a server in Komodo Core.
+
+10. **Verify Beszel Agent & Configure Email Notifications:**
+   * Verify Beszel Agent container status:
+     ```bash
+     docker compose -f services/beszel-agent/compose.yaml logs -f
+     ```
+   * Open Beszel Hub at `https://monitoring.internal.pippinn.me`.
+   * Confirm the `pippinn` NAS system is connected and reporting:
+     - All 4 SATA HDDs (`/dev/sda`, `/dev/sdb`, `/dev/sdc`, `/dev/sdd`) and NVMe (`/dev/nvme0n1`) show active S.M.A.R.T. health status and temperatures.
+     - Filesystem usage for `/` and `/mnt/storage` is tracked accurately.
+   * **Configure Email Notifications in Beszel Hub:**
+     - Navigate to **Settings ➔ Notifications ➔ Add Notification Provider ➔ Email (SMTP)**.
+     - Configure SMTP relay (or Shoutrrr SMTP URL) with your SMTP provider to deliver alerts to `grimurk@gmail.com`.
+   * **Configure Alert Rules in Beszel Hub:**
+     - Drive Temperature: Alert if HDD > 45°C or NVMe > 70°C.
+     - S.M.A.R.T. Health: Alert immediately on failing attribute.
+     - Disk Space: Alert if usage > 90%.
+     - Host Availability: Alert if offline for > 5 minutes.
+   * **Test Notification:**
+     - Click **Send Test** in Beszel Hub and verify test email arrives in your inbox.
 
 ---
 
@@ -487,8 +649,57 @@ Update `.gitignore` to allow tracked `.env` while strictly ignoring secrets:
        - /dev/dri:/dev/dri
      ```
    * Enable hardware acceleration in Plex Web UI settings.
-3. **Deploy SnapRAID Automation Timers:**
-   * Link and enable `scripts/snapraid-sync.timer` and `scripts/snapraid-scrub.timer`.
+3. **Deploy SnapRAID Validation & Automation Timers:**
+   * **Step A: Pre-flight Diff Check:**
+     Verify existing parity data matches the data drives without writing changes:
+     ```bash
+     sudo snapraid diff
+     ```
+     *(Confirm output reports clean status or expected differences).*
+   * **Step B: Test Automated Sync Script:**
+     Run the sync script manually to verify mount safety checks, diff parsing, and threshold logic:
+     ```bash
+     sudo /home/grimur/homelab/scripts/snapraid-sync.sh
+     ```
+     *(If testing with a large deletion batch, verify abort logic, or test bypass via `--force` or `touch /tmp/snapraid-sync.force`).*
+   * **Step C: Create Uptime Kuma Push Monitors:**
+     In Uptime Kuma UI (`https://status.internal.pippinn.me` or `http://192.168.86.26:3001`):
+     1. Add Monitor:
+        - **Type:** Push
+        - **Name:** `snapraid-sync`
+        - **Heartbeat Interval:** `25 hours` (86400s + buffer for daily 04:00 sync)
+        - Copy the push URL.
+     2. Add Monitor:
+        - **Type:** Push
+        - **Name:** `snapraid-scrub`
+        - **Heartbeat Interval:** `8 days` (buffer for weekly Sunday 05:00 scrub)
+        - Copy the push URL.
+   * **Step D: Configure Notification Settings:**
+     Copy the template and fill in the push URLs and recipient email:
+     ```bash
+     sudo cp /home/grimur/homelab/scripts/snapraid-notify.conf.example /etc/snapraid-notify.conf
+     sudo chmod 600 /etc/snapraid-notify.conf
+     sudo nano /etc/snapraid-notify.conf
+     ```
+     Ensure:
+     - `NOTIFY_EMAIL="grimurk@gmail.com"` (receives immediate email alerts if sync/scrub fails or deletion threshold is exceeded)
+     - `UPTIME_KUMA_PUSH_URL_SYNC="<push-url-from-kuma>"`
+     - `UPTIME_KUMA_PUSH_URL_SCRUB="<push-url-from-kuma>"`
+   * **Step E: Install & Enable Systemd Timers:**
+     Deploy daily sync (04:00) and weekly scrub (Sun 05:00) timers:
+     ```bash
+     sudo /home/grimur/homelab/scripts/setup-snapraid-maintenance.sh
+     ```
+   * **Step F: Verify Timer Status & Heartbeat:**
+     - Check timer activation:
+       ```bash
+       systemctl list-timers snapraid-*.timer
+       ```
+     - Run a test sync:
+       ```bash
+       sudo /home/grimur/homelab/scripts/snapraid-sync.sh
+       ```
+     - Verify in Uptime Kuma that `snapraid-sync` turns green ("Up"). Successful daily runs stay silent; any failures will trigger an email alert.
 4. **Deploy Automated Borg Backup Systemd Timer:**
    * Create and enable `borg-backup.service` and `borg-backup.timer` to schedule `infrastructure/backup/backup-to-pi.sh` nightly at 02:00, replacing the OMV Borg plugin.
 5. **Execute `.env` & `.secret.env` Normalization (from Section 4):**

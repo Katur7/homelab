@@ -1,0 +1,23 @@
+# snapraid-sync.service — SnapRAID daily synchronization with deletion threshold check
+#
+# Install:
+#   sudo cp /home/grimur/homelab/scripts/snapraid-sync.{service,timer} /etc/systemd/system/
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable --now snapraid-sync.timer
+# Or run:
+#   sudo /home/grimur/homelab/scripts/setup-snapraid-maintenance.sh
+
+[Unit]
+Description=SnapRAID Sync with Deletion Threshold Check
+Documentation=https://www.snapraid.it/
+After=local-fs.target
+ConditionPathExists=/etc/snapraid.conf
+
+[Service]
+Type=oneshot
+ExecStart=/home/grimur/homelab/scripts/snapraid-sync.sh
+Nice=19
+IOSchedulingClass=idle
+
+[Install]
+WantedBy=multi-user.target

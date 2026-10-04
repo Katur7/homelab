@@ -1,0 +1,20 @@
+# /etc/snapraid-notify.conf
+# Notification settings for SnapRAID daily sync and weekly scrub.
+# Copy this file to /etc/snapraid-notify.conf and chmod 600 /etc/snapraid-notify.conf
+
+# Recipient email address for failure alerts & deletion threshold warnings
+# Requires msmtp-mta / bsd-mailx configured via /etc/msmtprc
+NOTIFY_EMAIL="user@example.com"
+
+# Uptime Kuma Push Monitor URLs (heartbeat pings on successful runs)
+# 1. Daily Sync Push Monitor (interval: 25 hours in Uptime Kuma)
+UPTIME_KUMA_PUSH_URL_SYNC="http://192.168.86.26:3001/api/push/<sync-token>?status=up&msg=OK&ping="
+
+# 2. Weekly Scrub Push Monitor (interval: 8 days in Uptime Kuma)
+UPTIME_KUMA_PUSH_URL_SCRUB="http://192.168.86.26:3001/api/push/<scrub-token>?status=up&msg=OK&ping="
+
+# Safety deletion threshold (aborts sync if more than this many files were deleted)
+SNAPRAID_DEL_THRESHOLD=50
+
+# Weekly scrub percentage (percentage of array scrubbed every Sunday)
+SNAPRAID_SCRUB_PERCENT=5

@@ -1,0 +1,14 @@
+# snapraid-scrub.timer — Weekly trigger for SnapRAID scrub
+# Runs Sundays at 05:00 (following the 04:00 sync)
+
+[Unit]
+Description=Run SnapRAID Scrub Weekly
+Requires=snapraid-scrub.service
+
+[Timer]
+OnCalendar=Sun *-*-* 05:00:00
+Persistent=true
+RandomizedDelaySec=300
+
+[Install]
+WantedBy=timers.target

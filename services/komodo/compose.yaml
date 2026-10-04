@@ -1,0 +1,31 @@
+name: komodo
+
+services:
+  komodo-core:
+    image: ghcr.io/mbecker20/komodo-core:latest
+    container_name: komodo-core
+    restart: unless-stopped
+    env_file:
+      - ../../global.env
+      - vars.env
+    volumes:
+      - ./data:/etc/komodo
+      - /var/run/docker.sock:/var/run/docker.sock
+    networks:
+      - traefik_internal
+    labels:
+      - "wud.autoupdate=true"
+      - "traefik.enable=true"
+      - "traefik.docker.network=traefik_internal"
+      - "traefik.http.routers.komodo.rule=Host(`komodo.internal.pippinn.me`)"
+      - "traefik.http.routers.komodo.entrypoints=websecure"
+      - "traefik.http.services.komodo.loadbalancer.server.port=9120"
+    deploy:
+      resources:
+        limits:
+          cpus: "0.5"
+          memory: 256M
+
+networks:
+  traefik_internal:
+    external: true
