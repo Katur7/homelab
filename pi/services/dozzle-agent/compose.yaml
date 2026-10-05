@@ -1,0 +1,60 @@
+name: dozzle-agent
+
+services:
+  socket-proxy:
+    image: wollomatic/socket-proxy:1
+    container_name: socket-proxy-pi
+    restart: unless-stopped
+    environment:
+      - SP_LISTENIP=0.0.0.0
+      - SP_ALLOWFROM=0.0.0.0/0
+      - SP_ALLOW_GET=(/v1\..{1,2})?/(version|info|_ping|containers/.*|events.*|system/df|images/.*)
+      - SP_ALLOW_POST=(/v1\..{1,2})?/containers/([a-zA-Z0-9_.-]+)/(start|stop|restart)
+      - SP_ALLOW_HEAD=/_ping
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    security_opt:
+      - no-new-privileges:true
+    user: "65534:985"
+    networks:
+      - socket_proxy
+    deploy:
+      resources:
+        limits:
+          cpus: "0.1"
+          memory: 32M
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  dozzle-agent:
+    image: amir20/dozzle:latest
+    container_name: dozzle-agent
+    restart: unless-stopped
+    command: agent
+    depends_on:
+      - socket-proxy
+    ports:
+      - "7007:7007"
+    environment:
+      DOZZLE_HOSTNAME: pihole-pi
+      DOCKER_HOST: tcp://socket-proxy:2375
+    networks:
+      - socket_proxy
+      - default
+    deploy:
+      resources:
+        limits:
+          cpus: "0.25"
+          memory: 64M
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+networks:
+  socket_proxy:
+    internal: true

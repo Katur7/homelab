@@ -232,3 +232,13 @@ app supports custom request headers. If it does not, a header-secret bypass is
 not possible and an alternative client must be found.
 
 ---
+
+## Q8: Docker Socket-Proxy GID Differences Between NAS and Raspberry Pi
+
+**Symptom:** `wollomatic/socket-proxy` fails to start or throws permission denied errors accessing `/var/run/docker.sock` when run non-root via `user: "65534:<GID>"`.
+
+**Why it happens:** The host `docker` group ID varies across Linux distributions depending on installation order:
+- **Debian 12 NAS (`pippinn`):** Docker group GID is `995` (`user: "65534:995"` in `infrastructure/gateway/compose.yaml`).
+- **Raspberry Pi OS Lite Bookworm (`pihole-pi`):** Docker group GID is `985` (`user: "65534:985"` in `pi/services/dozzle-agent/compose.yaml`).
+
+**Fix:** Verify the host's actual docker group GID via `getent group docker | cut -d: -f3` and ensure the GID matches in the container's `user:` directive.
