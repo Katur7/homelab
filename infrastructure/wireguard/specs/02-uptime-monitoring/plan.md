@@ -26,7 +26,17 @@ Monitor the WireGuard container and `wg0` interface health on the NAS from Uptim
 - Verifies container status and `wg0` interface.
 - Loads secret token securely from `/root/.uptime-kuma-push-wireguard` (or `infrastructure/wireguard/.env`).
 
-### 2. Host Cron Setup (NAS)
+### 2. Schedule Setup (NAS)
+
+#### Option A: Systemd Timer (Recommended)
+Deploy `scripts/wireguard-uptime.{service,timer}`:
+```bash
+sudo cp /home/grimur/homelab/scripts/wireguard-uptime.{service,timer} /etc/systemd/system/
+sudo systemctl daemon-reload
+sudo systemctl enable --now wireguard-uptime.timer
+```
+
+#### Option B: Host Cron
 Create `/etc/cron.d/wireguard-uptime` on the NAS:
 ```bash
 */5 * * * * root /home/grimur/homelab/infrastructure/wireguard/scripts/uptime-push.sh >/dev/null 2>&1

@@ -711,14 +711,75 @@ Update `.gitignore` to allow tracked `.env` while strictly ignoring secrets:
        ```bash
        sudo /home/grimur/homelab/scripts/snapraid-sync.sh
        ```
-     - Verify in Uptime Kuma that `snapraid-sync` turns green ("Up"). Successful daily runs stay silent; any failures will trigger an email alert.
-4. **Deploy Automated Borg Backup Systemd Timer:**
-   * Create and enable `borg-backup.service` and `borg-backup.timer` to schedule `infrastructure/backup/backup-to-pi.sh` nightly at 02:00, replacing the OMV Borg plugin.
-5. **Execute `.env` & `.secret.env` Normalization (from Section 4):**
+4. **Deploy Automated Borg Backup Systemd Timers:**
+   * Replaces the OMV BorgBackup plugin with native systemd timers for both local NAS backups (`/mnt/storage/backup/borg2`) and offsite backup to `pi-backup`.
+   * **Step A: Verify Credentials & Passphrase:**
+     Ensure credentials extracted from the old system exist with restricted permissions:
+     ```bash
+     sudo chmod 600 /root/.borg-passphrase
+     sudo chmod 600 /root/.ssh/id_ed25519_backup_pi 2>/dev/null || true
+     ```
+   * **Step B: Test Local Backup Script:**
+     Verify local backups run cleanly against `/mnt/storage/backup/borg2`:
+     ```bash
+     # Test homelab configuration backup (excludes hot DBs, logs, caches)
+     sudo /home/grimur/homelab/infrastructure/backup/backup-local.sh homelab
+
+     # Test photos backup
+     sudo /home/grimur/homelab/infrastructure/backup/backup-local.sh photos
+
+     # Confirm archives exist in repository
+     export BORG_PASSCOMMAND='cat /root/.borg-passphrase'
+     borg list /mnt/storage/backup/borg2
+     ```
+   * **Step C: Configure Uptime Kuma Push Heartbeats (Optional):**
+     Create push monitors in Uptime Kuma and populate local heartbeat files:
+     ```bash
+     echo "http://192.168.86.26:3001/api/push/<homelab-token>?status=up&msg=OK&ping=" | sudo tee /root/.uptime-kuma-push-local-homelab
+     echo "http://192.168.86.26:3001/api/push/<photos-token>?status=up&msg=OK&ping=" | sudo tee /root/.uptime-kuma-push-local-photos
+     echo "http://192.168.86.26:3001/api/push/<offsite-token>?status=up&msg=OK&ping=" | sudo tee /root/.uptime-kuma-push-offsite
+     ```
+   * **Step D: Install & Enable Systemd Timers:**
+     Run the setup script to install service units and enable timers:
+     ```bash
+     sudo /home/grimur/homelab/scripts/setup-borg-backup.sh
+     ```
+     This activates:
+     - `borg-backup-local-homelab.timer`: Daily at 02:00
+     - `borg-backup-local-photos.timer`: Weekly Mondays at 03:00
+     - `borg-backup-offsite.timer`: Weekly Sundays at 04:00
+   * **Step E: Verify Timers & Logs:**
+     ```bash
+     systemctl list-timers borg-backup-*.timer
+5. **Deploy WireGuard Uptime Monitoring Systemd Timer:**
+   * Monitors the WireGuard container and `wg0` interface health, pushing heartbeats to Uptime Kuma every 5 minutes (replaces legacy `/etc/cron.d/wireguard-uptime`).
+   * **Step A: Verify Push Secret:**
+     Ensure the secret push URL file exists with restricted permissions:
+     ```bash
+     sudo chmod 600 /root/.uptime-kuma-push-wireguard
+     ```
+   * **Step B: Test Health Check Script:**
+     Run the check script manually to verify Docker inspection, `wg show wg0`, and push notification:
+     ```bash
+     sudo /home/grimur/homelab/infrastructure/wireguard/scripts/uptime-push.sh
+     ```
+   * **Step C: Install & Enable Systemd Timer:**
+     Run the setup script to validate prerequisites and enable the 5-minute timer:
+     ```bash
+     sudo /home/grimur/homelab/scripts/setup-wireguard-uptime.sh
+     ```
+   * **Step D: Verify Timer & Status:**
+     ```bash
+     systemctl list-timers wireguard-uptime.timer
+     journalctl -u wireguard-uptime.service -n 20
+     ```
+
+6. **Execute `.env` & `.secret.env` Normalization (from Section 4):**
+
    * Rename all `vars.env` files to `.env` (`git mv <dir>/vars.env <dir>/.env`).
    * Rename all secret `.env` files to `.secret.env` (`mv <dir>/.env <dir>/.secret.env`).
    * Update `.gitignore` to allow tracked `.env` and ignore `*.secret.env`.
    * Update `compose.yaml` files referencing `vars.env` to `.env` (and add `.secret.env` where secrets exist).
    * Verify all containers reload cleanly with `docker compose config`.
-6. **Update Documentation:**
+7. **Update Documentation:**
    * Update `ARCHITECTURE.md` with new CPU, RAM, and storage architecture.
