@@ -6,7 +6,7 @@ Two-tier borg backup strategy for the NAS:
 
 | Tier | Destination | Schedule | Covers |
 |------|-------------|----------|--------|
-| Local | Borg repo on NAS (OMV plugin) | Daily 02:00 | `homelab/` repo + app state + Immich photos |
+| Local | Borg repo on NAS (`/mnt/storage/backup/borg2`) | Daily 02:00 (homelab)<br>Weekly Mon 03:00 (photos) | `homelab/` repo + app state + Immich photos |
 | Offsite | `pi-backup` (parents' house, via Tailscale) | Weekly Sun 04:00 | `homelab/` repo + Immich photos |
 
 Both repos use `repokey-blake2` encryption. Passphrase in `/root/.borg-passphrase` on NAS.
@@ -17,20 +17,22 @@ Both repos use `repokey-blake2` encryption. Passphrase in `/root/.borg-passphras
 - Source: `/home/grimur/homelab/`
 - Contains: compose files, configs, app state directories, `.env` secrets
 - Excludes: hot databases, caches, logs — see [borg-exclude-homelab.txt](borg-exclude-homelab.txt)
-- Retention (offsite): 14 daily / 8 weekly / 12 monthly
+- Retention: 14 daily / 8 weekly / 12 monthly
 
-### `immich_photos` archive (offsite only)
-- Source: `/srv/dev-disk-by-uuid-0ddafbf7-f06d-424d-8e9c-95d97fbd4484/photos`
-- Contains: all Immich photos/videos + Immich's built-in DB dumps (`backups/`)
+### `immich_photos` archive
+- Source: `/mnt/storage/photos`
+- Contains: all Immich photos/videos + Immich's built-in DB dumps (`photos/backups/`)
 - Retention: 8 weekly / 12 monthly / 2 yearly
 
 ## Files
 
 | File | Purpose |
 |------|---------|
-| `backup-to-pi.sh` | Offsite push script — create, prune, compact |
-| `borg-post-backup.sh` | Post-backup hook for OMV Borg plugin — pings Uptime Kuma |
+| `backup-local.sh` | Local backup script — creates, prunes, compacts `homelab` and `photos` |
+| `backup-to-pi.sh` | Offsite push script to `pi-backup` — create, prune, compact |
+| `borg-post-backup.sh` | Post-backup hook to ping Uptime Kuma |
 | `borg-exclude-homelab.txt` | Exclusion patterns for the homelab archive |
+| `scripts/setup-borg-backup.sh` | Installs and enables systemd services & timers for all backups |
 
 ## Host-managed files (not in git)
 
@@ -41,31 +43,44 @@ Both repos use `repokey-blake2` encryption. Passphrase in `/root/.borg-passphras
 | `/root/.uptime-kuma-push-offsite` | NAS | Uptime Kuma push heartbeat URL for offsite backup |
 | `/root/.uptime-kuma-push-local-homelab` | NAS | Uptime Kuma push heartbeat URL for local homelab backup |
 | `/root/.uptime-kuma-push-local-photos` | NAS | Uptime Kuma push heartbeat URL for local photos backup |
-| `/etc/cron.d/backup-to-pi` | NAS | Weekly cron schedule |
+| `/etc/snapraid-notify.conf` | NAS | Failure email notifications (`NOTIFY_EMAIL`) |
 | `/home/borg/.ssh/authorized_keys` | pi-backup | Forced `borg serve` — restricts to repo path |
 
 ## Check if backup is working
 
 ```bash
+# Check systemd timers status
+systemctl list-timers borg-backup-*.timer
+
+# List local archives
+export BORG_PASSCOMMAND='cat /root/.borg-passphrase'
+borg list /mnt/storage/backup/borg2
+
 # List offsite archives
 BORG_PASSCOMMAND='cat /root/.borg-passphrase' \
 BORG_RSH='ssh -i /root/.ssh/id_ed25519_backup_pi' \
 borg list ssh://borg@pi-backup/mnt/backup/borg-repo
 
-# Check last cron run
-tail -50 /var/log/backup-to-pi.log
-
-# Check local backup (OMV plugin)
-# OMV UI → Services → BorgBackup → view repo/logs
+# Check recent backup service logs
+journalctl -u borg-backup-local-homelab.service -n 50
+journalctl -u borg-backup-local-photos.service -n 50
+journalctl -u borg-backup-offsite.service -n 50
 ```
 
 ## Run backup manually
 
 ```bash
-# Offsite (run as root, use tmux for long runs)
-sudo /home/grimur/homelab/infrastructure/backup/backup-to-pi.sh 2>&1 | tee /var/log/backup-to-pi.log
+# Local homelab backup
+sudo /home/grimur/homelab/infrastructure/backup/backup-local.sh homelab
 
-# Local only — use OMV BorgBackup plugin UI to trigger manually
+# Local photos backup
+sudo /home/grimur/homelab/infrastructure/backup/backup-local.sh photos
+
+# Both local backups
+sudo /home/grimur/homelab/infrastructure/backup/backup-local.sh all
+
+# Offsite to pi-backup (run as root, tmux recommended for initial or large syncs)
+sudo /home/grimur/homelab/infrastructure/backup/backup-to-pi.sh 2>&1 | tee /var/log/backup-to-pi.log
 ```
 
 ## Restore

@@ -1,0 +1,19 @@
+# borg-backup-offsite.service — Offsite BorgBackup to pi-backup
+[Unit]
+Description=Offsite BorgBackup to pi-backup
+Documentation=https://borgbackup.readthedocs.io/
+After=network-online.target local-fs.target
+Wants=network-online.target
+ConditionPathExists=/root/.borg-passphrase
+ConditionPathExists=/root/.ssh/id_ed25519_backup_pi
+
+[Service]
+Type=oneshot
+ExecStart=/home/grimur/homelab/infrastructure/backup/backup-to-pi.sh
+Nice=19
+IOSchedulingClass=idle
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

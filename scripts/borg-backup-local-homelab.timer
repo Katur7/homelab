@@ -1,0 +1,12 @@
+# borg-backup-local-homelab.timer — Daily trigger for local homelab backup
+[Unit]
+Description=Run Local Homelab BorgBackup Daily
+Requires=borg-backup-local-homelab.service
+
+[Timer]
+OnCalendar=*-*-* 02:00:00
+RandomizedDelaySec=300
+Persistent=true
+
+[Install]
+WantedBy=timers.target
