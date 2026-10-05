@@ -6,7 +6,7 @@ set -euo pipefail
 # the weekly docker-prune systemd service and timer.
 #
 # Usage:
-#   sudo ./scripts/setup-docker-maintenance.sh
+#   sudo ./scripts/setup/docker/setup.sh
 
 if [[ $EUID -ne 0 ]]; then
    echo "Error: This script must be run as root (or with sudo)." >&2
@@ -67,6 +67,12 @@ fi
 echo "==> Installing docker-prune systemd service and timer..."
 cp "${SCRIPT_DIR}/docker-prune.service" /etc/systemd/system/
 cp "${SCRIPT_DIR}/docker-prune.timer" /etc/systemd/system/
+
+if [[ -f "${SCRIPT_DIR}/homelab-containers.service" ]]; then
+    echo "==> Installing homelab-containers systemd service..."
+    cp "${SCRIPT_DIR}/homelab-containers.service" /etc/systemd/system/
+    systemctl enable homelab-containers.service
+fi
 
 systemctl daemon-reload
 systemctl enable --now docker-prune.timer

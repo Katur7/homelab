@@ -29,11 +29,9 @@ Monitor the WireGuard container and `wg0` interface health on the NAS from Uptim
 ### 2. Schedule Setup (NAS)
 
 #### Option A: Systemd Timer (Recommended)
-Deploy `scripts/wireguard-uptime.{service,timer}`:
+Run `scripts/setup/wireguard/setup.sh`:
 ```bash
-sudo cp /home/grimur/homelab/scripts/wireguard-uptime.{service,timer} /etc/systemd/system/
-sudo systemctl daemon-reload
-sudo systemctl enable --now wireguard-uptime.timer
+sudo /home/grimur/homelab/scripts/setup/wireguard/setup.sh
 ```
 
 #### Option B: Host Cron

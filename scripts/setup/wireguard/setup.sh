@@ -5,7 +5,7 @@ set -euo pipefail
 # Installs and enables the WireGuard Uptime Kuma heartbeat monitor systemd timer (every 5 minutes).
 #
 # Usage:
-#   sudo ./scripts/setup-wireguard-uptime.sh
+#   sudo ./scripts/setup/wireguard/setup.sh
 
 if [[ $EUID -ne 0 ]]; then
     echo "Error: This script must be run as root (or with sudo)." >&2
@@ -13,7 +13,7 @@ if [[ $EUID -ne 0 ]]; then
 fi
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-REPO_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
+REPO_DIR="$(cd "${SCRIPT_DIR}/../../.." && pwd)"
 CHECK_SCRIPT="${REPO_DIR}/infrastructure/wireguard/scripts/uptime-push.sh"
 PUSH_URL_FILE="/root/.uptime-kuma-push-wireguard"
 

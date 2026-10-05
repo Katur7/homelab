@@ -196,7 +196,7 @@ sudo systemctl restart smbd
      - `snapraid-sync`: Expected daily (interval 25 hours). Dead-man's switch triggered if sync fails to run or complete.
      - `snapraid-scrub`: Expected weekly (interval 8 days). Dead-man's switch triggered if weekly Sunday scrub fails to run or complete.
    * **Weekly Scrub (`scripts/snapraid-scrub.sh`):** Runs `snapraid scrub -p 5 -o 10` (scrubs 5% of array older than 10 days) with mount safety checks, error emails, and scrub heartbeat ping.
-   * **Systemd Timers:** Managed via `snapraid-sync.timer` (daily at 04:00) and `snapraid-scrub.timer` (Sundays at 05:00). Installed via `scripts/setup-snapraid-maintenance.sh`.
+   * **Systemd Timers:** Managed via `snapraid-sync.timer` (daily at 04:00) and `snapraid-scrub.timer` (Sundays at 05:00). Installed via `scripts/setup/snapraid/setup.sh`.
 
 ---
 
@@ -511,7 +511,7 @@ Update `.gitignore` to allow tracked `.env` while strictly ignoring secrets:
      - Confirm the USB coordinator is present: `ls -l /dev/ttyUSB*` (or `/dev/serial/by-id/*`).
    * Set up Docker maintenance:
      ```bash
-     sudo /home/grimur/homelab/scripts/setup-docker-maintenance.sh
+     sudo /home/grimur/homelab/scripts/setup/docker/setup.sh
      ```
    * Bring up core infrastructure stacks first (creates `traefik_internal` and core networks):
      ```bash
@@ -689,7 +689,7 @@ Update `.gitignore` to allow tracked `.env` while strictly ignoring secrets:
    * **Step D: Configure Notification Settings:**
      Copy the template and fill in the push URLs and recipient email:
      ```bash
-     sudo cp /home/grimur/homelab/scripts/snapraid-notify.conf.example /etc/snapraid-notify.conf
+     sudo cp /home/grimur/homelab/scripts/setup/snapraid/snapraid-notify.conf.example /etc/snapraid-notify.conf
      sudo chmod 600 /etc/snapraid-notify.conf
      sudo nano /etc/snapraid-notify.conf
      ```
@@ -700,7 +700,7 @@ Update `.gitignore` to allow tracked `.env` while strictly ignoring secrets:
    * **Step E: Install & Enable Systemd Timers:**
      Deploy daily sync (04:00) and weekly scrub (Sun 05:00) timers:
      ```bash
-     sudo /home/grimur/homelab/scripts/setup-snapraid-maintenance.sh
+     sudo /home/grimur/homelab/scripts/setup/snapraid/setup.sh
      ```
    * **Step F: Verify Timer Status & Heartbeat:**
      - Check timer activation:
@@ -742,7 +742,7 @@ Update `.gitignore` to allow tracked `.env` while strictly ignoring secrets:
    * **Step D: Install & Enable Systemd Timers:**
      Run the setup script to install service units and enable timers:
      ```bash
-     sudo /home/grimur/homelab/scripts/setup-borg-backup.sh
+     sudo /home/grimur/homelab/scripts/setup/borg/setup.sh
      ```
      This activates:
      - `borg-backup-local-homelab.timer`: Daily at 02:00
@@ -766,7 +766,7 @@ Update `.gitignore` to allow tracked `.env` while strictly ignoring secrets:
    * **Step C: Install & Enable Systemd Timer:**
      Run the setup script to validate prerequisites and enable the 5-minute timer:
      ```bash
-     sudo /home/grimur/homelab/scripts/setup-wireguard-uptime.sh
+     sudo /home/grimur/homelab/scripts/setup/wireguard/setup.sh
      ```
    * **Step D: Verify Timer & Status:**
      ```bash

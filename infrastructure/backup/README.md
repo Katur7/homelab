@@ -32,7 +32,7 @@ Both repos use `repokey-blake2` encryption. Passphrase in `/root/.borg-passphras
 | `backup-to-pi.sh` | Offsite push script to `pi-backup` — create, prune, compact |
 | `borg-post-backup.sh` | Post-backup hook to ping Uptime Kuma |
 | `borg-exclude-homelab.txt` | Exclusion patterns for the homelab archive |
-| `scripts/setup-borg-backup.sh` | Installs and enables systemd services & timers for all backups |
+| `scripts/setup/borg/setup.sh` | Installs and enables systemd services & timers for all backups |
 
 ## Host-managed files (not in git)
 

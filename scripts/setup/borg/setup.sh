@@ -6,7 +6,7 @@ set -euo pipefail
 # for both local NAS backups (homelab daily, photos weekly) and offsite pi-backup (weekly).
 #
 # Usage:
-#   sudo ./scripts/setup-borg-backup.sh
+#   sudo ./scripts/setup/borg/setup.sh
 
 if [[ $EUID -ne 0 ]]; then
     echo "Error: This script must be run as root (or with sudo)." >&2
@@ -14,7 +14,7 @@ if [[ $EUID -ne 0 ]]; then
 fi
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-REPO_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
+REPO_DIR="$(cd "${SCRIPT_DIR}/../../.." && pwd)"
 LOCAL_BACKUP_SCRIPT="${REPO_DIR}/infrastructure/backup/backup-local.sh"
 OFFSITE_BACKUP_SCRIPT="${REPO_DIR}/infrastructure/backup/backup-to-pi.sh"
 PASSPHRASE_FILE="/root/.borg-passphrase"
