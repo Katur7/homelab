@@ -1,0 +1,22 @@
+# wireguard-uptime.service — WireGuard container health push to Uptime Kuma
+#
+# Install:
+#   sudo cp /home/grimur/homelab/scripts/wireguard-uptime.{service,timer} /etc/systemd/system/
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable --now wireguard-uptime.timer
+
+[Unit]
+Description=WireGuard Uptime Kuma Heartbeat Push
+Documentation=https://github.com/Katur7/homelab
+After=docker.service
+Requires=docker.service
+ConditionPathExists=/root/.uptime-kuma-push-wireguard
+
+[Service]
+Type=oneshot
+ExecStart=/home/grimur/homelab/infrastructure/wireguard/scripts/uptime-push.sh
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

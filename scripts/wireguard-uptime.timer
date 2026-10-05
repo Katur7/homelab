@@ -1,0 +1,12 @@
+# wireguard-uptime.timer — 5-minute trigger for WireGuard health push
+
+[Unit]
+Description=Run WireGuard Uptime Push Every 5 Minutes
+Requires=wireguard-uptime.service
+
+[Timer]
+OnCalendar=*:0/5
+Persistent=true
+
+[Install]
+WantedBy=timers.target

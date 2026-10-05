@@ -751,14 +751,37 @@ Update `.gitignore` to allow tracked `.env` while strictly ignoring secrets:
    * **Step E: Verify Timers & Logs:**
      ```bash
      systemctl list-timers borg-backup-*.timer
-     journalctl -u borg-backup-local-homelab.service -n 50
+5. **Deploy WireGuard Uptime Monitoring Systemd Timer:**
+   * Monitors the WireGuard container and `wg0` interface health, pushing heartbeats to Uptime Kuma every 5 minutes (replaces legacy `/etc/cron.d/wireguard-uptime`).
+   * **Step A: Verify Push Secret:**
+     Ensure the secret push URL file exists with restricted permissions:
+     ```bash
+     sudo chmod 600 /root/.uptime-kuma-push-wireguard
      ```
-5. **Execute `.env` & `.secret.env` Normalization (from Section 4):**
+   * **Step B: Test Health Check Script:**
+     Run the check script manually to verify Docker inspection, `wg show wg0`, and push notification:
+     ```bash
+     sudo /home/grimur/homelab/infrastructure/wireguard/scripts/uptime-push.sh
+     ```
+   * **Step C: Install & Enable Systemd Timer:**
+     Deploy the service unit and 5-minute timer:
+     ```bash
+     sudo cp /home/grimur/homelab/scripts/wireguard-uptime.{service,timer} /etc/systemd/system/
+     sudo systemctl daemon-reload
+     sudo systemctl enable --now wireguard-uptime.timer
+     ```
+   * **Step D: Verify Timer & Status:**
+     ```bash
+     systemctl list-timers wireguard-uptime.timer
+     journalctl -u wireguard-uptime.service -n 20
+     ```
+
+6. **Execute `.env` & `.secret.env` Normalization (from Section 4):**
 
    * Rename all `vars.env` files to `.env` (`git mv <dir>/vars.env <dir>/.env`).
    * Rename all secret `.env` files to `.secret.env` (`mv <dir>/.env <dir>/.secret.env`).
    * Update `.gitignore` to allow tracked `.env` and ignore `*.secret.env`.
    * Update `compose.yaml` files referencing `vars.env` to `.env` (and add `.secret.env` where secrets exist).
    * Verify all containers reload cleanly with `docker compose config`.
-6. **Update Documentation:**
+7. **Update Documentation:**
    * Update `ARCHITECTURE.md` with new CPU, RAM, and storage architecture.
