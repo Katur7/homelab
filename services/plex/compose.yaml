@@ -21,6 +21,10 @@ services:
       - /mnt/storage/kids:/kids
       - /mnt/storage/movies:/movies
       - /mnt/storage/tv:/tv
+    devices:
+      - /dev/dri:/dev/dri
+    tmpfs:
+      - /transcode:size=4G
     labels:
       - "wud.autoupdate=true"
       - "wud.tag.include=^\\d+\\.\\d+\\.\\d+\\.\\d+-[a-zA-Z0-9]+-ls\\d+$$"
@@ -33,8 +37,8 @@ services:
     deploy:
       resources:
         limits:
-          cpus: "1.5"
-          memory: 512M
+          cpus: "4.0"
+          memory: 8192M
 
 networks:
   traefik_internal:

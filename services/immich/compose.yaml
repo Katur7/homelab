@@ -18,6 +18,7 @@ services:
     depends_on:
       - redis
       - database
+      - immich-machine-learning
     labels:
       - "traefik.enable=true"
       - "traefik.docker.network=traefik_internal"
@@ -87,6 +88,29 @@ services:
         limits:
           cpus: "0.5"
           memory: 1024M
+
+  immich-machine-learning:
+    image: ghcr.io/immich-app/immich-machine-learning:${IMMICH_VERSION:-v2.6.1}-openvino
+    container_name: immich_machine_learning
+    restart: unless-stopped
+    device_cgroup_rules:
+      - 'c 189:* rmw'
+    devices:
+      - /dev/dri:/dev/dri
+    volumes:
+      - model-cache:/cache
+    networks:
+      - default
+    labels:
+      - "wud.watch=false"
+    deploy:
+      resources:
+        limits:
+          cpus: "2.0"
+          memory: 4096M
+
+volumes:
+  model-cache:
 
 networks:
   traefik_internal:

@@ -5,14 +5,15 @@
 | Host | Role | Hardware / Specs | LAN IP | Repo path |
 |------|------|------------------|--------|-----------|
 | Debian NAS (`pippinn`) | Primary host — all production services, Traefik, Cloudflare Tunnel | Intel N150 (4C/4T), 32GB DDR4, 1TB NVMe | `192.168.86.17` | `services/`, `infrastructure/` |
-| Raspberry Pi | Secondary host — backup DNS, sync, monitoring hub, Immich ML | Raspberry Pi 4 (4GB) | `192.168.86.26` | `pi/` |
+| Raspberry Pi | Secondary host — backup DNS, sync, monitoring hub | Raspberry Pi 4 (4GB) | `192.168.86.26` | `pi/` |
 | Backup Pi | Offsite backup target (parents' house, Tailscale-only) | Raspberry Pi | `100.110.206.9` | — |
 
 **NAS PiHole** (primary DNS): macvlan IP `192.168.86.27`  
 **Pi PiHole** (backup DNS): direct port on Pi LAN IP `192.168.86.26`  
-**Immich ML** (remote inference): `http://192.168.86.26:3003` — hosted on Raspberry Pi; repatriation to NAS iGPU/CPU deferred to Milestone 23  
+**Immich ML** (local inference): `http://immich-machine-learning:3003` — hosted locally on NAS with Intel OpenVINO iGPU acceleration (`/dev/dri`) and NVMe model cache  
+**Plex Transcoding** (hardware acceleration): Intel QuickSync via `/dev/dri` with dedicated 4GB RAM `tmpfs` transcode buffer (`/transcode`)  
 **Beszel Hub** (system & S.M.A.R.T. monitoring): `http://192.168.86.26:8090` — exposed via Traefik at `monitoring.internal.pippinn.me`; agents on Pi and NAS (`SYS_RAWIO` drive monitoring)  
-**Dozzle** (container logs & lifecycle): `https://logs.internal.pippinn.me` — real-time container log dashboard and container action manager on NAS  
+**Dozzle** (container logs & lifecycle): `https://logs.internal.pippinn.me` — real-time container log dashboard and container action manager on NAS; connected to Dozzle agent on Raspberry Pi (`192.168.86.26:7007`) for unified multi-host monitoring  
 
 ---
 
