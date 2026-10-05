@@ -650,17 +650,13 @@ Update `.gitignore` to allow tracked `.env` while strictly ignoring secrets:
 
 ### Phase 3: Post-Migration Enhancements
 
-1. **Move Immich ML back to NAS (Reverse Spec 10):**
-   * The Intel N150 has AVX2 (x86-64-v3) support.
-   * Update `services/immich/compose.yaml` to run `immich-machine-learning` locally with CPU/iGPU acceleration.
-   * Turn off remote ML container on the Raspberry Pi to free up Pi memory and CPU.
-2. **Enable Intel QuickSync (QSV) Hardware Transcoding in Plex:**
-   * Pass `/dev/dri` into `services/plex/compose.yaml`:
-     ```yaml
-     devices:
-       - /dev/dri:/dev/dri
-     ```
-   * Enable hardware acceleration in Plex Web UI settings.
+1. **[Deferred to M23] Move Immich ML back to NAS (Reverse Spec 10):**
+   * *Status:* Deferred to Milestone 23. Immich ML remains hosted on the Raspberry Pi (`http://192.168.86.26:3003`) during initial hardware cutover to keep the migration scoped strictly to platform stability.
+   * *Future M23 Scope:* Update `services/immich/compose.yaml` to run `immich-machine-learning` locally with CPU/iGPU acceleration and decommission the remote container on the Pi.
+
+2. **[Deferred to M23] Enable Intel QuickSync (QSV) Hardware Transcoding in Plex:**
+   * *Status:* Deferred to Milestone 23.
+   * *Future M23 Scope:* Pass `/dev/dri` into `services/plex/compose.yaml` and configure Plex hardware acceleration after validating base host performance.
 3. **Deploy SnapRAID Validation & Automation Timers:**
    * **Step A: Pre-flight Diff Check:**
      Verify existing parity data matches the data drives without writing changes:
@@ -774,12 +770,8 @@ Update `.gitignore` to allow tracked `.env` while strictly ignoring secrets:
      journalctl -u wireguard-uptime.service -n 20
      ```
 
-6. **Execute `.env` & `.secret.env` Normalization (from Section 4):**
+6. **[Deferred / Under Evaluation] `.env` & `.secret.env` Normalization:**
+   * *Status:* Skipped for this migration. Retaining the existing `vars.env` (non-sensitive tracked config) and `.env` (gitignored secrets) model while evaluating configuration workflows.
 
-   * Rename all `vars.env` files to `.env` (`git mv <dir>/vars.env <dir>/.env`).
-   * Rename all secret `.env` files to `.secret.env` (`mv <dir>/.env <dir>/.secret.env`).
-   * Update `.gitignore` to allow tracked `.env` and ignore `*.secret.env`.
-   * Update `compose.yaml` files referencing `vars.env` to `.env` (and add `.secret.env` where secrets exist).
-   * Verify all containers reload cleanly with `docker compose config`.
-7. **Update Documentation:**
-   * Update `ARCHITECTURE.md` with new CPU, RAM, and storage architecture.
+7. **[Completed] Update Documentation:**
+   * Updated `ARCHITECTURE.md` to reflect the new Intel N150 hardware, 32GB RAM, NVMe boot drive, MergerFS unified pool (`/mnt/storage`), SnapRAID parity protection, Borg backup timers, and modular `scripts/setup/` tooling.
