@@ -764,11 +764,9 @@ Update `.gitignore` to allow tracked `.env` while strictly ignoring secrets:
      sudo /home/grimur/homelab/infrastructure/wireguard/scripts/uptime-push.sh
      ```
    * **Step C: Install & Enable Systemd Timer:**
-     Deploy the service unit and 5-minute timer:
+     Run the setup script to validate prerequisites and enable the 5-minute timer:
      ```bash
-     sudo cp /home/grimur/homelab/scripts/wireguard-uptime.{service,timer} /etc/systemd/system/
-     sudo systemctl daemon-reload
-     sudo systemctl enable --now wireguard-uptime.timer
+     sudo /home/grimur/homelab/scripts/setup-wireguard-uptime.sh
      ```
    * **Step D: Verify Timer & Status:**
      ```bash
