@@ -1,11 +1,12 @@
-# Spec 23: Intel GPU Acceleration (Plex QuickSync & Immich Machine Learning Repatriation)
+# Spec 23: Intel GPU Acceleration & Workload Repatriation (Plex QuickSync, Immich ML & Photoframe Server)
 
 ## 📌 Context & Motivation
 
-Following the NAS hardware upgrade to the Intel N150 (Twin Lake / Alder Lake-N with 24EU Intel UHD Graphics and 32GB RAM in Milestone 17), two hardware-accelerated workloads were deferred to Milestone 23:
+Following the NAS hardware upgrade to the Intel N150 (Twin Lake / Alder Lake-N with 24EU Intel UHD Graphics and 32GB RAM in Milestone 17), three workloads that were previously constrained by the legacy NAS or hosted on the Raspberry Pi 4 are repatriated to the NAS:
 1. **Immich Machine Learning Repatriation:** In Milestone 10, Immich ML had to be offloaded to the Raspberry Pi 4 because the legacy AMD E-350 CPU lacked the x86-64-v2 microarchitecture baseline (NumPy 2.4 / SIGILL crashes). The new Intel N150 fully supports modern x86 extensions and possesses an integrated GPU capable of accelerating neural network inference (CLIP smart search and facial recognition) via Intel OpenVINO.
 2. **Plex QuickSync Hardware Transcoding:** The legacy NAS lacked hardware video encoding/decoding. Passing the Intel GPU (`/dev/dri`) into the Plex container allows hardware transcoding (`Transcode (hw)` via Intel QuickSync), drastically reducing CPU load during stream conversions. Mounting a RAM-backed `tmpfs` for transcoded video segments prevents unnecessary SSD wear.
-3. **Pi Fleet Decommissioning:** Decommissioning the remote Immich ML container on the Pi frees up ~1.5–2GB RAM and CPU overhead on the Pi 4, returning the Pi to its lean role as a secondary DNS (PiHole), monitoring hub (Beszel / Uptime Kuma), and sync node.
+3. **Photoframe Server Repatriation:** In Milestone 18, the Photoframe server was placed on the Pi because the Pi was already hosting lightweight secondary tasks. Migrating it to the NAS centralizes application hosting, enables dual access (direct port 8088 for the ESP32-S3 photo frame plus Traefik HTTPS routing), and frees up resources on the Pi.
+4. **Pi Fleet Decommissioning:** Decommissioning remote Immich ML and the Photoframe server on the Pi returns the Pi 4 to its lean role as a secondary DNS (PiHole), monitoring hub (Beszel / Uptime Kuma), and sync node.
 
 ---
 
@@ -24,12 +25,18 @@ Following the NAS hardware upgrade to the Intel N150 (Twin Lake / Alder Lake-N w
    - Update Plex resource limits to 8GB RAM (`8192M`) and 4.0 CPUs to accommodate the 4GB tmpfs buffer plus Plex runtime.
    - Configure Plex Web UI to use `/transcode` as the temporary transcoder directory.
 
-3. **Decommission Pi Immich ML Service:**
-   - Stop the Pi ML container and prune its model cache volume (`docker compose down -v`).
-   - Remove `pi/services/immich-ml/` from git.
+3. **Repatriate Photoframe Server to NAS:**
+   - Document `services/photoframe/README.md` pointing to standalone repository `~/photoframe-server` on the NAS.
+   - Configure dual ingress: direct port `8088:8088` (for ESP32-S3 firmware compatibility) plus Traefik HTTPS routing (`photoframe.internal.pippinn.me`) on `traefik_internal`.
+   - Update custom PiHole DNS host record for `photoframe.internal.pippinn.me` to point to `192.168.86.17`.
 
-4. **Update System Architecture Documentation:**
-   - Update `ARCHITECTURE.md` to reflect Immich ML running locally on the NAS with OpenVINO and Plex with QuickSync.
+4. **Decommission Pi Services:**
+   - Immich ML: stop container and prune model cache volume (`docker compose down -v`).
+   - Photoframe: stop container on Pi (`docker compose down -v`).
+   - Clean up repo directories (`pi/services/immich-ml` and `pi/services/photoframe`) and update `pi/README.md`.
+
+5. **Update System Architecture Documentation:**
+   - Update `ARCHITECTURE.md` to reflect Immich ML, Plex QuickSync, and Photoframe running on the NAS.
 
 ---
 
@@ -105,7 +112,47 @@ IMMICH_MACHINE_LEARNING_URL=http://immich-machine-learning:3003
 
 ---
 
-### Part 3: Deployment & Host Validation Runbook
+### Part 3: Photoframe Server Setup on NAS
+
+#### 1. Register Documentation
+Create `services/photoframe/README.md` and remove `pi/services/photoframe/README.md`.
+
+#### 2. Compose Configuration in `~/photoframe-server/compose.yaml`
+```yaml
+name: photoframe-server
+
+services:
+  photoframe:
+    build: .
+    container_name: photoframe_server
+    restart: unless-stopped
+    ports:
+      - "8088:8088"
+    networks:
+      - traefik_internal
+    env_file:
+      - .env
+    labels:
+      - "traefik.enable=true"
+      - "traefik.docker.network=traefik_internal"
+      - "traefik.http.routers.photoframe-internal.entrypoints=websecure"
+      - "traefik.http.routers.photoframe-internal.rule=Host(`photoframe.internal.pippinn.me`)"
+      - "traefik.http.services.photoframe-internal.loadbalancer.server.port=8088"
+
+networks:
+  traefik_internal:
+    external: true
+```
+
+#### 3. Update PiHole DNS Record
+Update the local DNS host record so `photoframe.internal.pippinn.me` points to `192.168.86.17`:
+```bash
+/home/grimur/homelab/scripts/add-dns.sh photoframe.internal.pippinn.me 192.168.86.17
+```
+
+---
+
+### Part 4: Deployment & Host Validation Runbook
 
 #### 1. NAS Service Bring-Up
 On the NAS (`pippinn`):
@@ -119,6 +166,13 @@ docker compose -f services/plex/compose.yaml up -d
 
 # Recreate Immich stack
 docker compose -f services/immich/compose.yaml up -d
+
+# Deploy Photoframe on NAS
+cd ~
+git clone https://github.com/Katur7/photoframe-server.git
+cd photoframe-server
+scp grimur@192.168.86.26:~/photoframe-server/.env .env
+docker compose up -d --build
 ```
 
 #### 2. Configure Plex Web Transcoder
@@ -131,18 +185,17 @@ docker compose -f services/immich/compose.yaml up -d
 7. Set **Hardware transcoding device** to `Alder Lake-N / Intel UHD Graphics` (or Auto).
 8. Click **Save Changes**.
 
-#### 3. Decommission Remote Immich ML on Pi
+#### 3. Decommission Remote Services on Pi
 On the Raspberry Pi (`192.168.86.26`):
 ```bash
+# Stop and prune Immich ML
 cd ~/homelab/pi/services/immich-ml
 docker compose down -v
 docker rmi ghcr.io/immich-app/immich-machine-learning:v3.2.2 || true
-```
 
-#### 4. Clean Repository
-Remove `pi/services/immich-ml/` from git tracking and delete directory:
-```bash
-git rm -r pi/services/immich-ml
+# Stop and prune Photoframe
+cd ~/photoframe-server
+docker compose down -v
 ```
 
 ---
@@ -155,35 +208,15 @@ git rm -r pi/services/immich-ml
 - [ ] Start a stream on a client device that forces video transcoding (e.g. convert 4K/1080p to 720p 4Mbps).
 - [ ] Open Plex Web Dashboard (Activity ➔ Dashboard / Now Playing):
   - Confirm video stream states **Transcode (hw)** for both Decode and Encode.
-- [ ] Check host GPU activity: run `vainfo --display drm --device /dev/dri/renderD128` on the NAS to ensure driver handles sessions cleanly.
 
 ### Immich Machine Learning:
 - [ ] Inspect container health: `docker ps --filter "name=immich_machine_learning"` is Up.
-- [ ] Check ML container logs:
-  ```bash
-  docker logs --tail 50 immich_machine_learning
-  ```
-  Confirm OpenVINO initializes and detects Intel GPU / OpenVINO execution provider without falling back with fatal errors.
-- [ ] Check Immich Server logs:
-  ```bash
-  docker logs --tail 50 immich_server
-  ```
-  Confirm successful communication with `http://immich-machine-learning:3003`.
-- [ ] Perform a Smart Search in Immich Web UI (e.g. search "dog", "car", "sunset"): verify search returns relevant image results.
-- [ ] Trigger a manual Face Detection or CLIP task from Immich Admin UI (Administration ➔ Jobs ➔ Facial Recognition / Smart Search): verify jobs process smoothly.
+- [ ] Check ML container logs: `docker logs --tail 50 immich_machine_learning` confirms OpenVINO initializes and loads the Intel GPU execution provider.
+- [ ] Check Immich Server logs: `docker logs --tail 50 immich_server` confirms connection to `http://immich-machine-learning:3003`.
+- [ ] Perform a Smart Search in Immich Web UI (e.g. search "dog", "sunset"): verify search returns relevant results.
 
-### Pi Decommissioning:
-- [ ] Verify container is stopped on Pi: `ssh grimur@192.168.86.26 "docker ps -a | grep immich"` returns empty.
-- [ ] Verify Pi RAM usage: `ssh grimur@192.168.86.26 "free -m"` reflects reclaimed memory (~1.5GB+ free).
-
----
-
-## 🔄 Rollback Strategy
-
-1. **Immich:**
-   - If OpenVINO on N150 encounters issues:
-     - Swap image in `services/immich/compose.yaml` from `-openvino` to standard CPU image: `ghcr.io/immich-app/immich-machine-learning:${IMMICH_VERSION:-v2.6.1}`.
-     - Alternatively, re-point `services/immich/vars.env` back to `IMMICH_MACHINE_LEARNING_URL=http://192.168.86.26:3003` and restart Pi container.
-2. **Plex:**
-   - Remove `devices:` and `tmpfs:` from `services/plex/compose.yaml` and re-run `docker compose up -d`.
-   - Clear the `Transcoder temporary directory` in Plex Web UI to fall back to the internal default.
+### Photoframe Server:
+- [ ] Verify DNS: `dig +short photoframe.internal.pippinn.me @192.168.86.27` returns `192.168.86.17`.
+- [ ] Verify Direct Port HTTP: `curl -I http://photoframe.internal.pippinn.me:8088/current.png` returns `200 OK`.
+- [ ] Verify Traefik HTTPS: `curl -I https://photoframe.internal.pippinn.me/current.png` returns `200 OK`.
+- [ ] Verify Pi services stopped: `ssh grimur@192.168.86.26 "docker ps"` shows no immich or photoframe containers.
