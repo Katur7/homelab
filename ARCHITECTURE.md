@@ -13,7 +13,7 @@
 **Immich ML** (local inference): `http://immich-machine-learning:3003` — hosted locally on NAS with Intel OpenVINO iGPU acceleration (`/dev/dri`) and NVMe model cache  
 **Plex Transcoding** (hardware acceleration): Intel QuickSync via `/dev/dri` with dedicated 4GB RAM `tmpfs` transcode buffer (`/transcode`)  
 **Beszel Hub** (system & S.M.A.R.T. monitoring): `http://192.168.86.26:8090` — exposed via Traefik at `monitoring.internal.pippinn.me`; agents on Pi and NAS (`SYS_RAWIO` drive monitoring)  
-**Dozzle** (container logs & lifecycle): `https://logs.internal.pippinn.me` — real-time container log dashboard and container action manager on NAS; connected to Dozzle agent on Raspberry Pi (`192.168.86.26:7007`) for unified multi-host monitoring  
+**Dozzle** (container logs & lifecycle): `https://logs.internal.pippinn.me` — real-time container log dashboard and container action manager on NAS (hardened via gateway `socket-proxy`); connected to Dozzle agent on Raspberry Pi (`192.168.86.26:7007`, hardened via local `socket-proxy`) for unified multi-host monitoring  
 
 ---
 

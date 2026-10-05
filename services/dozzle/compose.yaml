@@ -6,14 +6,16 @@ services:
     container_name: dozzle
     restart: unless-stopped
     volumes:
-      - /var/run/docker.sock:/var/run/docker.sock
       - ./data:/data
     environment:
       DOZZLE_ENABLE_ACTIONS: "true"
       DOZZLE_AUTH_PROVIDER: forward-proxy
       DOZZLE_REMOTE_AGENT: 192.168.86.26:7007
+      DOZZLE_HOSTNAME: pippinn
+      DOCKER_HOST: tcp://socket-proxy:2375
     networks:
       - traefik_internal
+      - socket_proxy
     labels:
       - "wud.autoupdate=true"
       - "traefik.enable=true"
@@ -30,4 +32,6 @@ services:
 
 networks:
   traefik_internal:
+    external: true
+  socket_proxy:
     external: true
