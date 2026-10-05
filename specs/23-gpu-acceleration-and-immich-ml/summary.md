@@ -1,4 +1,4 @@
-# Spec 23: Intel GPU Acceleration (Plex QuickSync & Immich Machine Learning Repatriation) — Summary
+# Spec 23: Intel GPU Acceleration & Workload Repatriation (Plex, Immich ML & Photoframe) — Summary
 
 ## What Was Done
 
@@ -17,9 +17,10 @@
      - Mount dedicated 4GB in-memory tmpfs buffer: `tmpfs: - /transcode:size=4G` to eliminate SSD write wear during transcoding.
      - Increased resource limits to **8GB RAM (`8192M`)** and **4.0 CPUs** to support the 4GB tmpfs transcode buffer and active streams.
 
-3. **Pi Fleet Decommissioning:**
-   - Removed `pi/services/immich-ml/` service definition from the git repository.
-   - Documented Pi container teardown and model volume pruning commands (`docker compose down -v`).
+3. **Photoframe Server Repatriation:**
+   - Created [`services/photoframe/README.md`](file:///Users/grimur/personal-code/homelab/services/photoframe/README.md) documenting deployment of `~/photoframe-server` on the NAS with dual access (direct port `8088:8088` and Traefik HTTPS router on `traefik_internal`).
+   - Removed `pi/services/photoframe/` from the git repository.
+   - Updated [`pi/README.md`](file:///Users/grimur/personal-code/homelab/pi/README.md) and [`pi/scripts/update-containers.sh`](file:///Users/grimur/personal-code/homelab/pi/scripts/update-containers.sh).
 
 4. **Architecture Documentation:**
    - Updated [`ARCHITECTURE.md`](file:///Users/grimur/personal-code/homelab/ARCHITECTURE.md) to document Immich ML local inference with Intel OpenVINO and Plex hardware transcoding with QuickSync.
@@ -37,11 +38,19 @@ cd ~/homelab
 docker compose -f services/plex/compose.yaml pull
 docker compose -f services/immich/compose.yaml pull
 
-# Recreate Plex stack
+# Recreate Plex & Immich stacks
 docker compose -f services/plex/compose.yaml up -d
-
-# Recreate Immich stack
 docker compose -f services/immich/compose.yaml up -d
+
+# Clone and run Photoframe on NAS
+cd ~
+git clone https://github.com/Katur7/photoframe-server.git
+cd photoframe-server
+scp grimur@192.168.86.26:~/photoframe-server/.env .env
+docker compose up -d --build
+
+# Update PiHole DNS host record
+/home/grimur/homelab/scripts/add-dns.sh photoframe.internal.pippinn.me 192.168.86.17
 ```
 
 ### 2. Configure Plex Web Transcoder
@@ -49,42 +58,24 @@ docker compose -f services/immich/compose.yaml up -d
 1. Navigate to `https://plex.internal.pippinn.me` (or `http://192.168.86.17:32400/web`).
 2. Go to **Settings ➔ Server ➔ Transcoder** (click **Show Advanced**).
 3. Set **Transcoder temporary directory** to `/transcode`.
-4. Ensure **Use hardware acceleration when available** is enabled.
-5. Ensure **Use hardware-accelerated video encoding** is enabled.
-6. Set **Hardware transcoding device** to `Alder Lake-N / Intel UHD Graphics` (or Auto).
-7. Click **Save Changes**.
+4. Ensure **Use hardware acceleration when available** and **Use hardware-accelerated video encoding** are enabled.
+5. Set **Hardware transcoding device** to `Alder Lake-N / Intel UHD Graphics` (or Auto).
+6. Click **Save Changes**.
 
-### 3. Verify Hardware Transcoding in Plex
-
-1. Start streaming a video from a client and force a transcode (e.g. set playback quality to 720p 4Mbps).
-2. Open Plex Web **Dashboard** (Activity icon ➔ Dashboard).
-3. Check **Now Playing**:
-   - Ensure the stream shows **Transcode (hw)** for video decode and encode.
-4. Verify `/transcode` tmpfs:
-   ```bash
-   docker exec -it plex df -h /transcode
-   ```
-
-### 4. Verify Immich Machine Learning
-
-1. Check ML container logs:
-   ```bash
-   docker logs --tail 50 immich_machine_learning
-   ```
-   Verify OpenVINO initializes and loads the Intel GPU / execution provider.
-2. Check Immich Server logs:
-   ```bash
-   docker logs --tail 50 immich_server
-   ```
-   Confirm successful ping/connection to `http://immich-machine-learning:3003`.
-3. Open Immich Web UI at `https://photos.pippinn.me` and test a Smart Search (e.g., query "lake", "dog", or "forest") to verify inference results.
-
-### 5. Decommission Remote Immich ML on the Raspberry Pi (`192.168.86.26`)
+### 3. Decommission Services on the Raspberry Pi (`192.168.86.26`)
 
 ```bash
 ssh grimur@192.168.86.26
+
+# Decommission Immich ML
 cd ~/homelab/pi/services/immich-ml
 docker compose down -v
 docker rmi ghcr.io/immich-app/immich-machine-learning:v3.2.2 || true
+
+# Decommission Photoframe
+cd ~/photoframe-server
+docker compose down -v
+
+# Sync homelab repo
 cd ~/homelab && git pull
 ```
