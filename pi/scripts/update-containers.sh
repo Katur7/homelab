@@ -12,7 +12,7 @@ HOMELAB_DIR="/home/grimur/homelab"
 # photoframe is deliberately excluded: this script runs `docker compose pull`
 # but the photoframe image is locally built (build: .) with no upstream to pull.
 # Updates are handled via git pull + rebuild in ~/photoframe-server.
-STACKS=("pihole" "uptime-kuma")
+STACKS=("pihole" "uptime-kuma" "dozzle-agent")
 
 log() { logger -t container-update "$*"; }
 

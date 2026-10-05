@@ -11,6 +11,7 @@ services:
     environment:
       DOZZLE_ENABLE_ACTIONS: "true"
       DOZZLE_AUTH_PROVIDER: forward-proxy
+      DOZZLE_REMOTE_AGENT: 192.168.86.26:7007
     networks:
       - traefik_internal
     labels:

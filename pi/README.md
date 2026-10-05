@@ -21,6 +21,7 @@ and uptime monitoring (UptimeKuma).
 | PiHole (backup DNS) | 53, 80 | `http://192.168.86.26/admin` |
 | UptimeKuma | 3001 | `http://192.168.86.26:3001` |
 | Photoframe | 8088 | `http://photoframe.internal.pippinn.me:8088/current.png` |
+| Dozzle Agent | 7007 | gRPC endpoint for NAS Dozzle (`logs.internal.pippinn.me`) |
 
 Nebula-Sync has no web UI — runs as a sidecar to PiHole.
 Docker image updates are handled by a weekly cron job (`pi/scripts/update-containers.sh`).
@@ -62,6 +63,10 @@ docker compose up -d
 # UptimeKuma
 cd ~/homelab/pi/services/uptime-kuma
 docker compose up -d
+
+# Dozzle Agent
+cd ~/homelab/pi/services/dozzle-agent
+docker compose up -d
 ```
 
 ## Repo Layout
@@ -70,6 +75,7 @@ docker compose up -d
 pi/
   global.env          # Pi-wide vars (TZ, PUID/PGID)
   services/
+    dozzle-agent/     # Dozzle agent + socket-proxy for secure log streaming to NAS
     pihole/           # PiHole + Nebula-Sync (same stack)
     uptime-kuma/
     photoframe/       # Documentation only — stack lives in ~/photoframe-server

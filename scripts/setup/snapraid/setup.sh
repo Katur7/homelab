@@ -6,7 +6,7 @@ set -euo pipefail
 # systemd services and timers.
 #
 # Usage:
-#   sudo ./scripts/setup-snapraid-maintenance.sh
+#   sudo ./scripts/setup/snapraid/setup.sh
 
 if [[ $EUID -ne 0 ]]; then
     echo "Error: This script must be run as root (or with sudo)." >&2
@@ -14,9 +14,10 @@ if [[ $EUID -ne 0 ]]; then
 fi
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+SCRIPTS_DIR="$(cd "${SCRIPT_DIR}/../.." && pwd)"
 
 echo "==> Verifying scripts exist and are executable..."
-chmod +x "${SCRIPT_DIR}/snapraid-sync.sh" "${SCRIPT_DIR}/snapraid-scrub.sh"
+chmod +x "${SCRIPTS_DIR}/snapraid-sync.sh" "${SCRIPTS_DIR}/snapraid-scrub.sh"
 
 echo "==> Copying systemd service and timer units..."
 cp "${SCRIPT_DIR}/snapraid-sync.service" /etc/systemd/system/
