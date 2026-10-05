@@ -1,0 +1,12 @@
+# borg-backup-local-photos.timer — Weekly trigger for local photos backup
+[Unit]
+Description=Run Local Photos BorgBackup Weekly
+Requires=borg-backup-local-photos.service
+
+[Timer]
+OnCalendar=Mon *-*-* 03:00:00
+RandomizedDelaySec=300
+Persistent=true
+
+[Install]
+WantedBy=timers.target

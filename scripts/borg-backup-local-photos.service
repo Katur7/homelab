@@ -1,0 +1,17 @@
+# borg-backup-local-photos.service — Local Borg backup for Immich photos
+[Unit]
+Description=Local BorgBackup for Immich Photos
+Documentation=https://borgbackup.readthedocs.io/
+After=local-fs.target
+ConditionPathExists=/root/.borg-passphrase
+
+[Service]
+Type=oneshot
+ExecStart=/home/grimur/homelab/infrastructure/backup/backup-local.sh photos
+Nice=19
+IOSchedulingClass=idle
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target
