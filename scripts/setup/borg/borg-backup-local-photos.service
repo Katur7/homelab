@@ -2,7 +2,7 @@
 [Unit]
 Description=Local BorgBackup for Immich Photos
 Documentation=https://borgbackup.readthedocs.io/
-After=local-fs.target
+After=local-fs.target borg-backup-local-homelab.service
 ConditionPathExists=/root/.borg-passphrase
 
 [Service]

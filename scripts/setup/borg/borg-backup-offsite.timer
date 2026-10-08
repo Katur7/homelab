@@ -1,7 +1,6 @@
 # borg-backup-offsite.timer — Weekly trigger for offsite Borg backup to pi-backup
 [Unit]
 Description=Run Offsite BorgBackup Weekly
-Requires=borg-backup-offsite.service
 
 [Timer]
 OnCalendar=Sun *-*-* 04:00:00

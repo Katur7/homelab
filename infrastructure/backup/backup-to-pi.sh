@@ -3,6 +3,7 @@ set -euo pipefail
 
 export BORG_PASSCOMMAND='cat /root/.borg-passphrase'
 export BORG_RSH='ssh -i /root/.ssh/id_ed25519_backup_pi'
+export BORG_LOCK_WAIT="${BORG_LOCK_WAIT:-900}"
 REPO="ssh://borg@pi-backup/mnt/backup/borg-repo"
 RATE=10000  # ~10 MB/s
 

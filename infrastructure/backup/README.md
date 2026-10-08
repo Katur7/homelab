@@ -67,6 +67,30 @@ journalctl -u borg-backup-local-photos.service -n 50
 journalctl -u borg-backup-offsite.service -n 50
 ```
 
+### Stale Repository Lock Troubleshooting
+
+If a backup fails with `Failed to create/acquire the lock ... lock.exclusive (timeout)`:
+
+1. Confirm no active Borg backup or prune job is currently running:
+   ```bash
+   pgrep -a borg
+   ```
+2. If no Borg process is running, break the stale lock on the local repo:
+   ```bash
+   export BORG_PASSCOMMAND='cat /root/.borg-passphrase'
+   borg break-lock /mnt/storage/backup/borg2
+   ```
+   Or for the offsite repo:
+   ```bash
+   BORG_PASSCOMMAND='cat /root/.borg-passphrase' \
+   BORG_RSH='ssh -i /root/.ssh/id_ed25519_backup_pi' \
+   borg break-lock ssh://borg@pi-backup/mnt/backup/borg-repo
+   ```
+3. Re-run the failed backup:
+   ```bash
+   sudo /home/grimur/homelab/infrastructure/backup/backup-local.sh photos
+   ```
+
 ## Run backup manually
 
 ```bash

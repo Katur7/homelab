@@ -27,6 +27,7 @@ else
 fi
 
 export BORG_PASSCOMMAND="cat ${PASSPHRASE_FILE}"
+export BORG_LOCK_WAIT="${BORG_LOCK_WAIT:-900}"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 EXCLUDE_FILE="${SCRIPT_DIR}/borg-exclude-homelab.txt"
 
@@ -96,12 +97,14 @@ backup_homelab() {
   log "Starting local backup: homelab -> $REPO"
   local start_time
   start_time=$(date +%s)
+  local exit_code=0
 
-  if ! borg create --stats \
+  borg create --stats \
       --exclude-from "$EXCLUDE_FILE" \
       "${REPO}::homelab-{now}" \
-      /home/grimur/homelab/ 2>&1; then
-    local exit_code=$?
+      /home/grimur/homelab/ || exit_code=$?
+
+  if [[ $exit_code -ne 0 ]]; then
     local msg="Borg local backup for homelab failed with exit code ${exit_code} on $(hostname)."
     log "Error: $msg"
     notify_email "[BorgBackup FAILED] Local homelab backup error on $(hostname)" "$msg"
@@ -109,12 +112,28 @@ backup_homelab() {
   fi
 
   log "Pruning old homelab archives..."
+  exit_code=0
   borg prune --stats --glob-archives 'homelab-*' \
     --keep-daily 14 --keep-weekly 8 --keep-monthly 12 \
-    "$REPO"
+    "$REPO" || exit_code=$?
+
+  if [[ $exit_code -ne 0 ]]; then
+    local msg="Borg prune for homelab failed with exit code ${exit_code} on $(hostname)."
+    log "Error: $msg"
+    notify_email "[BorgBackup FAILED] Local homelab prune error on $(hostname)" "$msg"
+    return "$exit_code"
+  fi
 
   log "Compacting repository..."
-  borg compact "$REPO"
+  exit_code=0
+  borg compact "$REPO" || exit_code=$?
+
+  if [[ $exit_code -ne 0 ]]; then
+    local msg="Borg compact for homelab failed with exit code ${exit_code} on $(hostname)."
+    log "Error: $msg"
+    notify_email "[BorgBackup FAILED] Local homelab compact error on $(hostname)" "$msg"
+    return "$exit_code"
+  fi
 
   local elapsed=$(( $(date +%s) - start_time ))
   log "Local homelab backup completed successfully in ${elapsed}s."
@@ -126,6 +145,7 @@ backup_photos() {
   local start_time
   start_time=$(date +%s)
   local photos_dir="/mnt/storage/photos"
+  local exit_code=0
 
   if [[ ! -d "$photos_dir" ]]; then
     local msg="Photos directory $photos_dir does not exist or storage is unmounted on $(hostname)."
@@ -134,10 +154,11 @@ backup_photos() {
     return 1
   fi
 
-  if ! borg create --stats \
+  borg create --stats \
       "${REPO}::immich_photos-{now}" \
-      "$photos_dir" 2>&1; then
-    local exit_code=$?
+      "$photos_dir" || exit_code=$?
+
+  if [[ $exit_code -ne 0 ]]; then
     local msg="Borg local backup for immich_photos failed with exit code ${exit_code} on $(hostname)."
     log "Error: $msg"
     notify_email "[BorgBackup FAILED] Local photos backup error on $(hostname)" "$msg"
@@ -145,12 +166,28 @@ backup_photos() {
   fi
 
   log "Pruning old photos archives..."
+  exit_code=0
   borg prune --stats --glob-archives 'immich_photos-*' \
     --keep-weekly 8 --keep-monthly 12 --keep-yearly 2 \
-    "$REPO"
+    "$REPO" || exit_code=$?
+
+  if [[ $exit_code -ne 0 ]]; then
+    local msg="Borg prune for immich_photos failed with exit code ${exit_code} on $(hostname)."
+    log "Error: $msg"
+    notify_email "[BorgBackup FAILED] Local photos prune error on $(hostname)" "$msg"
+    return "$exit_code"
+  fi
 
   log "Compacting repository..."
-  borg compact "$REPO"
+  exit_code=0
+  borg compact "$REPO" || exit_code=$?
+
+  if [[ $exit_code -ne 0 ]]; then
+    local msg="Borg compact for immich_photos failed with exit code ${exit_code} on $(hostname)."
+    log "Error: $msg"
+    notify_email "[BorgBackup FAILED] Local photos compact error on $(hostname)" "$msg"
+    return "$exit_code"
+  fi
 
   local elapsed=$(( $(date +%s) - start_time ))
   log "Local photos backup completed successfully in ${elapsed}s."
@@ -165,13 +202,13 @@ case "$TARGET" in
     backup_photos
     ;;
   all)
-    backup_homelab
-    backup_photos
+    rc=0
+    backup_homelab || rc=$?
+    backup_photos || rc=$?
+    exit "$rc"
     ;;
   *)
     echo "Usage: $0 [homelab|photos|all]" >&2
     exit 1
     ;;
 esac
-
-exit 0
