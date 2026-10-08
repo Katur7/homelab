@@ -2,7 +2,6 @@
 
 [Unit]
 Description=Run WireGuard Uptime Push Every 5 Minutes
-Requires=wireguard-uptime.service
 
 [Timer]
 OnCalendar=*:0/5
