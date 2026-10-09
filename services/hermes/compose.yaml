@@ -1,0 +1,33 @@
+name: hermes
+
+services:
+  hermes-workspace:
+    image: ghcr.io/outsourc-e/hermes-workspace:v2.3.0
+    container_name: hermes-workspace
+    restart: unless-stopped
+    extra_hosts:
+      - host.docker.internal:172.17.0.1
+    networks:
+      - traefik_internal
+    env_file:
+      - ../../global.env
+      - vars.env
+    volumes:
+      - ./data:/app/data
+    labels:
+      - "traefik.enable=true"
+      - "traefik.docker.network=traefik_internal"
+      - "traefik.http.routers.hermes-internal.entrypoints=websecure"
+      - "traefik.http.routers.hermes-internal.rule=Host(`hermes.internal.pippinn.me`)"
+      - "traefik.http.routers.hermes-internal.middlewares=authelia-auth@file"
+      - "traefik.http.services.hermes-internal.loadbalancer.server.port=3000"
+      - "wud.tag.include=^v\\d+\\.\\d+\\.\\d+$$"
+    deploy:
+      resources:
+        limits:
+          cpus: "0.5"
+          memory: 256M
+
+networks:
+  traefik_internal:
+    external: true

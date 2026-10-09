@@ -37,6 +37,7 @@ volumes/
 /services/journiv/data/
 /services/komodo/data/
 /services/dozzle/data/
+/services/hermes/data/
 
 # Gateway — sensitive runtime files only (most config IS git-tracked)
 /infrastructure/gateway/config/acme.json
