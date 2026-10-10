@@ -2,7 +2,7 @@ name: hermes
 
 services:
   hermes-workspace:
-    image: ghcr.io/outsourc-e/hermes-workspace:v2.3.0
+    image: ghcr.io/outsourc-e/hermes-workspace:latest
     container_name: hermes-workspace
     restart: unless-stopped
     extra_hosts:
@@ -21,7 +21,7 @@ services:
       - "traefik.http.routers.hermes-internal.rule=Host(`hermes.internal.pippinn.me`)"
       - "traefik.http.routers.hermes-internal.middlewares=authelia-auth@file"
       - "traefik.http.services.hermes-internal.loadbalancer.server.port=3000"
-      - "wud.tag.include=^v\\d+\\.\\d+\\.\\d+$$"
+      - "wud.watch=false"
     deploy:
       resources:
         limits:
