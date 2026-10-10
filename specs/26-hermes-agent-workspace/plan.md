@@ -14,23 +14,16 @@ To enable autonomous AI-assisted operations in the homelab while maintaining str
 
 ### 1. Host Daemon Setup (NAS `pippinn`)
 - **Runtime User:** `grimur`
-- **Installation:** Isolated environment via `pipx` or virtualenv (`~/.local/share/hermes/venv`) with `hermes-agent`.
-- **Systemd Service:** `~/.config/systemd/user/hermes.service` (or `/etc/systemd/system/hermes.service`) running `hermes gateway run`. User lingering enabled via `loginctl enable-linger grimur` to ensure persistence across sessions.
-- **Port & Binding:** Gateway API listens on port `8642` (`0.0.0.0:8642` or `172.17.0.1:8642` for Docker bridge access).
+- **Installation:** Official standalone installer (`curl -fsSL https://hermes-agent.nousresearch.com/install.sh | bash`) providing `~/.local/bin/hermes`.
+- **Systemd Services:**
+  - `hermes-gateway.service`: Runs the core engine, agent execution, and API server on `172.17.0.1:8642`.
+  - `hermes-dashboard.service`: Runs the auxiliary capabilities server on `172.17.0.1:9119` (unlocks Skills & Config in Workspace).
 - **Credentials & Environment (`~/.hermes/.env`):**
-  - Stored outside git repository in the user's home directory.
-  - Contains `GEMINI_API_KEY`.
+  - Contains `GOOGLE_API_KEY`, `GEMINI_API_KEY`, and `API_SERVER_KEY`.
 - **Configuration (`~/.hermes/config.yaml`):**
-  - Model: Google Gemini (`gemini-3.8-flash` or `gemini-2.5-pro`).
-  - Terminal Backend: `local` (executes directly on host with access to `/home/grimur/personal-code/homelab` and `docker`).
-  - Security / Approvals:
-    ```yaml
-    security:
-      tirith_enabled: true
-    approvals:
-      mode: smart
-      timeout: 300
-    ```
+  - Model: Google Gemini (`provider: gemini`, default `gemini-2.5-pro`).
+  - Terminal Backend: `local` (direct host access for homelab operations).
+  - Security / Approvals: Tirith `smart` approval mode.
 
 ### 2. Hermes Workspace Service (`services/hermes/compose.yaml`)
 - **Image:** `ghcr.io/outsourc-e/hermes-workspace:latest`

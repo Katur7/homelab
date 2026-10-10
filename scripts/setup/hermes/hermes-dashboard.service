@@ -1,11 +1,11 @@
 [Unit]
-Description=Hermes AI Agent Gateway Daemon
+Description=Hermes AI Agent Dashboard Service
 After=network.target
 
 [Service]
 Type=simple
 WorkingDirectory=%h
-ExecStart=%h/.local/bin/hermes gateway run
+ExecStart=%h/.local/bin/hermes dashboard --host 172.17.0.1 --port 9119 --no-open --insecure
 Restart=always
 RestartSec=5s
 Environment=PATH=%h/.local/bin:%h/.hermes/bin:/usr/local/bin:/usr/bin:/bin

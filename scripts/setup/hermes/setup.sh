@@ -86,13 +86,14 @@ else
     echo "${HERMES_DIR}/.env already exists."
 fi
 
-# 5. Install systemd user service
-echo "==> Installing systemd user service..."
+# 5. Install systemd user services
+echo "==> Installing systemd user services..."
 mkdir -p "${SYSTEMD_USER_DIR}"
-cp "${SCRIPT_DIR}/hermes.service" "${SYSTEMD_USER_DIR}/hermes.service"
+cp "${SCRIPT_DIR}/hermes-dashboard.service" "${SYSTEMD_USER_DIR}/hermes-dashboard.service"
 
 systemctl --user daemon-reload
-systemctl --user enable hermes.service
+systemctl --user enable hermes-gateway.service 2>/dev/null || true
+systemctl --user enable hermes-dashboard.service
 
 # Enable lingering for the user so systemd user services run when logged out
 if command -v loginctl >/dev/null 2>&1; then
@@ -102,10 +103,10 @@ if command -v loginctl >/dev/null 2>&1; then
 fi
 
 echo ""
-echo "✅ Hermes Agent daemon setup complete!"
+echo "✅ Hermes Agent daemon & dashboard setup complete!"
 echo ""
 echo "Next steps:"
 echo "1. Verify ~/.hermes/.env contains your GOOGLE_API_KEY / GEMINI_API_KEY and API_SERVER_KEY"
-echo "2. Start the service: systemctl --user start hermes.service"
-echo "3. Check status:     systemctl --user status hermes.service"
-echo "4. Check logs:       journalctl --user -u hermes.service -f"
+echo "2. Start gateway:   systemctl --user start hermes-gateway.service"
+echo "3. Start dashboard: systemctl --user start hermes-dashboard.service"
+echo "4. Check status:    systemctl --user status hermes-gateway.service hermes-dashboard.service"
