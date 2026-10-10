@@ -15,21 +15,46 @@ SYSTEMD_USER_DIR="${HOME}/.config/systemd/user"
 
 echo "==> Setting up Hermes Agent Host Daemon..."
 
-# 1. Ensure Python 3 venv is available
+# 1. Ensure Python 3 and venv support are available
 if ! command -v python3 >/dev/null 2>&1; then
     echo "Error: python3 is required but not installed." >&2
+    exit 1
+fi
+
+if ! python3 -c "import ensurepip" >/dev/null 2>&1; then
+    echo "Error: 'ensurepip' module is missing. On Debian/Ubuntu, python3-venv is required." >&2
+    echo "Please run on the host:" >&2
+    echo "  sudo apt update && sudo apt install -y python3-venv python3-pip" >&2
     exit 1
 fi
 
 # 2. Create virtual environment
 echo "==> Creating virtual environment at ${VENV_DIR}..."
 mkdir -p "$(dirname "${VENV_DIR}")"
+
+# If directory exists but pip is missing, cleanup the broken venv
+if [[ -d "${VENV_DIR}" && ! -f "${VENV_DIR}/bin/pip" ]]; then
+    echo "Existing virtualenv at ${VENV_DIR} is incomplete (missing pip). Removing and recreating..."
+    rm -rf "${VENV_DIR}"
+fi
+
 if [[ ! -d "${VENV_DIR}" ]]; then
-    python3 -m venv "${VENV_DIR}"
+    if ! python3 -m venv "${VENV_DIR}"; then
+        echo "" >&2
+        echo "Error: Failed to create virtualenv. Please ensure python3-venv is installed:" >&2
+        echo "  sudo apt update && sudo apt install -y python3-venv python3-pip" >&2
+        rm -rf "${VENV_DIR}"
+        exit 1
+    fi
 fi
 
 # 3. Install or update hermes-agent
 echo "==> Installing hermes-agent in virtualenv..."
+if [[ ! -f "${VENV_DIR}/bin/pip" ]]; then
+    echo "Error: ${VENV_DIR}/bin/pip was not created. Running ensurepip..." >&2
+    "${VENV_DIR}/bin/python3" -m ensurepip --upgrade || true
+fi
+
 "${VENV_DIR}/bin/pip" install --upgrade pip
 "${VENV_DIR}/bin/pip" install --upgrade hermes-agent
 
