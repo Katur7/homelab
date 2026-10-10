@@ -5,10 +5,10 @@ After=network.target
 [Service]
 Type=simple
 WorkingDirectory=%h
-ExecStart=%h/.local/share/hermes/venv/bin/hermes gateway run
+ExecStart=%h/.local/bin/hermes gateway run
 Restart=always
 RestartSec=5s
-Environment=PATH=%h/.local/share/hermes/venv/bin:/usr/local/bin:/usr/bin:/bin
+Environment=PATH=%h/.local/bin:%h/.hermes/bin:/usr/local/bin:/usr/bin:/bin
 EnvironmentFile=-%h/.hermes/.env
 
 [Install]
