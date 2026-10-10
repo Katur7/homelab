@@ -17,6 +17,8 @@ services:
     environment:
       - HERMES_API_TOKEN=${HERMES_API_TOKEN:-}
       - HERMES_PASSWORD=${HERMES_PASSWORD:-}
+      - HERMES_UID=${PUID:-1000}
+      - HERMES_GID=${PGID:-1000}
     volumes:
       - ./data:/home/workspace/.hermes
     labels:
