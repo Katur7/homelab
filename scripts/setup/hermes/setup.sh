@@ -56,7 +56,7 @@ if [[ ! -f "${VENV_DIR}/bin/pip" ]]; then
 fi
 
 "${VENV_DIR}/bin/pip" install --upgrade pip
-"${VENV_DIR}/bin/pip" install --upgrade hermes-agent
+"${VENV_DIR}/bin/pip" install --upgrade hermes-agent aiohttp
 
 # 4. Create ~/.hermes configuration
 echo "==> Configuring ~/.hermes..."

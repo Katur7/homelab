@@ -16,6 +16,7 @@ services:
         required: false
     environment:
       - HERMES_API_TOKEN=${HERMES_API_TOKEN:-}
+      - HERMES_PASSWORD=${HERMES_PASSWORD:-}
     volumes:
       - ./data:/app/data
     labels:
