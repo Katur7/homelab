@@ -18,7 +18,7 @@ services:
       - HERMES_API_TOKEN=${HERMES_API_TOKEN:-}
       - HERMES_PASSWORD=${HERMES_PASSWORD:-}
     volumes:
-      - ./data:/app/data
+      - ./data:/home/workspace/.hermes
     labels:
       - "traefik.enable=true"
       - "traefik.docker.network=traefik_internal"
