@@ -19,6 +19,15 @@ SCRIPTS_DIR="$(cd "${SCRIPT_DIR}/../.." && pwd)"
 echo "==> Verifying scripts exist and are executable..."
 chmod +x "${SCRIPTS_DIR}/snapraid-sync.sh" "${SCRIPTS_DIR}/snapraid-scrub.sh"
 
+echo "==> Deploying SnapRAID configuration..."
+if [[ -f /etc/snapraid.conf ]]; then
+    BACKUP_FILE="/etc/snapraid.conf.bak.$(date +%Y%m%d%H%M%S)"
+    echo "Backing up existing /etc/snapraid.conf to ${BACKUP_FILE}..."
+    cp /etc/snapraid.conf "${BACKUP_FILE}"
+fi
+cp "${SCRIPT_DIR}/snapraid.conf" /etc/snapraid.conf
+chmod 644 /etc/snapraid.conf
+
 echo "==> Copying systemd service and timer units..."
 cp "${SCRIPT_DIR}/snapraid-sync.service" /etc/systemd/system/
 cp "${SCRIPT_DIR}/snapraid-sync.timer"   /etc/systemd/system/

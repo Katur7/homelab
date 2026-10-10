@@ -185,7 +185,13 @@ sudo systemctl restart smbd
    exclude *.!sync
    exclude .DS_Store
    exclude Thumbs.db
+
+   # Exclude transient download / torrent directories
+   exclude /downloads-tv/
+   exclude /downloads-movies/
+   exclude /downloads-kids-movies/
    ```
+   *(Tracked in repository at `scripts/setup/snapraid/snapraid.conf` and deployed via `scripts/setup/snapraid/setup.sh`)*
 
 2. Automation via `scripts/snapraid-sync.sh` and `scripts/snapraid-scrub.sh`:
    * **Mountpoint Safety Verification:** Checks that all underlying disk paths (`/srv/disk1`, `/srv/disk2`, `/srv/disk3`, `/srv/parity1`) are active mountpoints (`mountpoint -q`) before running any SnapRAID commands. Prevents disastrous parity corruption if an unmounted disk appears empty.
