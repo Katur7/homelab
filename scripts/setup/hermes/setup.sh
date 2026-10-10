@@ -91,9 +91,15 @@ if [[ ! -f "${HERMES_DIR}/.env" ]]; then
     cat <<'EOF' > "${HERMES_DIR}/.env"
 # Hermes Agent Secrets
 GEMINI_API_KEY=
+
+# API Server Configuration (required for Hermes Workspace)
+API_SERVER_ENABLED=true
+API_SERVER_HOST=0.0.0.0
+API_SERVER_PORT=8642
+API_SERVER_KEY=
 EOF
     chmod 600 "${HERMES_DIR}/.env"
-    echo "Created ${HERMES_DIR}/.env (chmod 600). Please add your GEMINI_API_KEY."
+    echo "Created ${HERMES_DIR}/.env (chmod 600). Please add your GEMINI_API_KEY and API_SERVER_KEY."
 else
     echo "${HERMES_DIR}/.env already exists."
 fi

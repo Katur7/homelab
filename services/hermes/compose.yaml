@@ -12,6 +12,10 @@ services:
     env_file:
       - ../../global.env
       - vars.env
+      - path: .env
+        required: false
+    environment:
+      - HERMES_API_TOKEN=${HERMES_API_TOKEN:-}
     volumes:
       - ./data:/app/data
     labels:
