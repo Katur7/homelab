@@ -1,0 +1,283 @@
+# Water Leak Alarm
+# Monitors all moisture binary sensors (device_class: moisture).
+# Sends critical alerts to notify.grimur_mobile_phones after a 15-second grace period.
+# Repeats alerts every 10 minutes unless muted via input_boolean.water_leak_muted.
+# Sends cleared notification when sensor returns to dry (5-second debounce) and auto-resets mute.
+
+input_boolean:
+  water_leak_muted:
+    name: "Water Leak Notifications Muted"
+    icon: mdi:bell-off-outline
+    initial: off
+
+input_datetime:
+  water_leak_last_notified:
+    name: "Water Leak: Last Notified"
+    has_date: true
+    has_time: true
+
+group:
+  water_leak_exclusions:
+    name: "Water Leak Exclusions"
+    entities: []
+
+template:
+  - sensor:
+      - name: "Active Water Leaks"
+        unique_id: active_water_leak_count
+        state: >
+          {% set excluded = state_attr('group.water_leak_exclusions', 'entity_id') | default([]) %}
+          {% set ns = namespace(count=0) %}
+          {% for s in states.binary_sensor
+              | selectattr('attributes.device_class', 'eq', 'moisture') %}
+            {% if s.state == 'on' and s.entity_id not in excluded %}
+              {% set ns.count = ns.count + 1 %}
+            {% endif %}
+          {% endfor %}
+          {{ ns.count }}
+        attributes:
+          devices: >
+            {% set excluded = state_attr('group.water_leak_exclusions', 'entity_id') | default([]) %}
+            {% set ns = namespace(items=[]) %}
+            {% for s in states.binary_sensor
+                | selectattr('attributes.device_class', 'eq', 'moisture') %}
+              {% if s.state == 'on' and s.entity_id not in excluded %}
+                {% set ns.items = ns.items + [s.name] %}
+              {% endif %}
+            {% endfor %}
+            {{ ns.items }}
+        unit_of_measurement: "leaks"
+        icon: >
+          {% set excluded = state_attr('group.water_leak_exclusions', 'entity_id') | default([]) %}
+          {% set ns = namespace(found=false) %}
+          {% for s in states.binary_sensor
+              | selectattr('attributes.device_class', 'eq', 'moisture') %}
+            {% if s.state == 'on' and s.entity_id not in excluded %}
+              {% set ns.found = true %}
+            {% endif %}
+          {% endfor %}
+          {{ 'mdi:water-alert' if ns.found else 'mdi:water-check' }}
+
+script:
+  water_leak_send_critical_notification:
+    alias: "Water Leak: Send Critical Notification"
+    fields:
+      title:
+        description: "Alert title"
+        example: "💧 Water Leak Detected!"
+      message:
+        description: "Alert message text"
+        example: "Water detected at Kitchen Sink!"
+    sequence:
+      - service: notify.grimur_mobile_phones
+        data:
+          title: "{{ title }}"
+          message: "{{ message }}"
+          data:
+            group: "water-leak-alerts"
+            channel: "Water Leak Alerts"
+            importance: max
+            priority: high
+            ttl: 0
+            color: "#D32F2F"
+            push:
+              sound:
+                name: default
+                critical: 1
+                volume: 1.0
+
+  water_leak_send_cleared_notification:
+    alias: "Water Leak: Send Cleared Notification"
+    fields:
+      message:
+        description: "Notification message text"
+        example: "Water leak at Kitchen Sink has cleared (sensor is dry)."
+    sequence:
+      - service: notify.grimur_mobile_phones
+        data:
+          title: "💧 Water Leak Cleared"
+          message: "{{ message }}"
+          data:
+            group: "water-leak-alerts"
+            channel: "Water Leak Alerts"
+
+automation:
+  - alias: "Water Leak: Alert on Detection"
+    id: water_leak_alert_on_detection
+    mode: parallel
+    max: 10
+    trigger:
+      - platform: event
+        event_type: state_changed
+    condition:
+      - condition: template
+        value_template: >
+          {{ trigger.event.data.get('new_state') is not none
+             and trigger.event.data.new_state.attributes.get('device_class') == 'moisture'
+             and trigger.event.data.new_state.state == 'on'
+             and trigger.event.data.get('old_state') is not none
+             and trigger.event.data.old_state.state != 'on'
+             and trigger.event.data.new_state.entity_id
+                 not in (state_attr('group.water_leak_exclusions', 'entity_id') | default([])) }}
+    action:
+      - delay:
+          seconds: 15
+      - condition: template
+        value_template: >
+          {{ states(trigger.event.data.entity_id) == 'on' }}
+      - service: script.water_leak_send_critical_notification
+        data:
+          title: "💧 Water Leak Detected!"
+          message: >
+            {% set triggered_name = trigger.event.data.new_state.name %}
+            {% set excluded = state_attr('group.water_leak_exclusions', 'entity_id') | default([]) %}
+            {% set other_leaks = states.binary_sensor
+                | selectattr('attributes.device_class', 'eq', 'moisture')
+                | selectattr('state', 'eq', 'on')
+                | rejectattr('entity_id', 'eq', trigger.event.data.entity_id)
+                | rejectattr('entity_id', 'in', excluded)
+                | map(attribute='name') | list %}
+            {% if other_leaks | count > 0 %}
+              Water detected at {{ triggered_name }}! Also currently wet: {{ other_leaks | join(', ') }}.
+            {% else %}
+              Water detected at {{ triggered_name }}!
+            {% endif %}
+      - service: input_datetime.set_datetime
+        target:
+          entity_id: input_datetime.water_leak_last_notified
+        data:
+          datetime: "{{ now().strftime('%Y-%m-%d %H:%M:%S') }}"
+
+  - alias: "Water Leak: Repeating Alert"
+    id: water_leak_repeating_alert
+    trigger:
+      - platform: time_pattern
+        seconds: 0
+    condition:
+      - condition: state
+        entity_id: input_boolean.water_leak_muted
+        state: "off"
+      - condition: template
+        value_template: >
+          {% set excluded = state_attr('group.water_leak_exclusions', 'entity_id') | default([]) %}
+          {% set wet_sensors = states.binary_sensor
+              | selectattr('attributes.device_class', 'eq', 'moisture')
+              | selectattr('state', 'eq', 'on')
+              | rejectattr('entity_id', 'in', excluded)
+              | list %}
+          {% set last_str = states('input_datetime.water_leak_last_notified') %}
+          {% if wet_sensors | count > 0 and last_str not in ['unknown', 'unavailable', ''] %}
+            {{ (as_timestamp(now()) - as_timestamp(last_str, 0)) >= 600 }}
+          {% else %}
+            false
+          {% endif %}
+    action:
+      - service: script.water_leak_send_critical_notification
+        data:
+          title: "💧 Water Leak Ongoing!"
+          message: >
+            {% set excluded = state_attr('group.water_leak_exclusions', 'entity_id') | default([]) %}
+            {% set wet_names = states.binary_sensor
+                | selectattr('attributes.device_class', 'eq', 'moisture')
+                | selectattr('state', 'eq', 'on')
+                | rejectattr('entity_id', 'in', excluded)
+                | map(attribute='name') | list %}
+            Water is still detected at: {{ wet_names | join(', ') }}. (Repeating every 10 min. Enable mute toggle to silence).
+      - service: input_datetime.set_datetime
+        target:
+          entity_id: input_datetime.water_leak_last_notified
+        data:
+          datetime: "{{ now().strftime('%Y-%m-%d %H:%M:%S') }}"
+
+  - alias: "Water Leak: Alert Cleared"
+    id: water_leak_alert_cleared
+    mode: parallel
+    max: 10
+    trigger:
+      - platform: event
+        event_type: state_changed
+    condition:
+      - condition: template
+        value_template: >
+          {{ trigger.event.data.get('new_state') is not none
+             and trigger.event.data.new_state.attributes.get('device_class') == 'moisture'
+             and trigger.event.data.new_state.state == 'off'
+             and trigger.event.data.get('old_state') is not none
+             and trigger.event.data.old_state.state == 'on'
+             and (trigger.event.data.new_state.last_changed - trigger.event.data.old_state.last_changed).total_seconds() >= 14
+             and trigger.event.data.new_state.entity_id
+                 not in (state_attr('group.water_leak_exclusions', 'entity_id') | default([])) }}
+    action:
+      - delay:
+          seconds: 5
+      - condition: template
+        value_template: >
+          {{ states(trigger.event.data.entity_id) == 'off' }}
+      - service: script.water_leak_send_cleared_notification
+        data:
+          message: >
+            Water leak at {{ trigger.event.data.new_state.name }} has cleared (sensor is dry).
+      - choose:
+          - conditions:
+              - condition: template
+                value_template: >
+                  {% set excluded = state_attr('group.water_leak_exclusions', 'entity_id') | default([]) %}
+                  {% set active_count = states.binary_sensor
+                      | selectattr('attributes.device_class', 'eq', 'moisture')
+                      | selectattr('state', 'eq', 'on')
+                      | rejectattr('entity_id', 'in', excluded)
+                      | list | count %}
+                  {{ active_count == 0 }}
+            sequence:
+              - service: input_boolean.turn_off
+                target:
+                  entity_id: input_boolean.water_leak_muted
+
+  - alias: "Water Leak: Reset Mute When Dry"
+    id: water_leak_reset_mute_when_dry
+    trigger:
+      - platform: numeric_state
+        entity_id: sensor.active_water_leaks
+        below: 1
+    condition:
+      - condition: state
+        entity_id: input_boolean.water_leak_muted
+        state: "on"
+    action:
+      - service: input_boolean.turn_off
+        target:
+          entity_id: input_boolean.water_leak_muted
+
+  - alias: "Water Leak: Check on HA Startup"
+    id: water_leak_check_on_startup
+    trigger:
+      - platform: homeassistant
+        event: start
+    action:
+      - delay:
+          seconds: 30
+      - condition: template
+        value_template: >
+          {% set excluded = state_attr('group.water_leak_exclusions', 'entity_id') | default([]) %}
+          {% set active = states.binary_sensor
+              | selectattr('attributes.device_class', 'eq', 'moisture')
+              | selectattr('state', 'eq', 'on')
+              | rejectattr('entity_id', 'in', excluded)
+              | list %}
+          {{ active | count > 0 and states('input_boolean.water_leak_muted') == 'off' }}
+      - service: script.water_leak_send_critical_notification
+        data:
+          title: "💧 Active Water Leak (HA Restart)"
+          message: >
+            {% set excluded = state_attr('group.water_leak_exclusions', 'entity_id') | default([]) %}
+            {% set active_names = states.binary_sensor
+                | selectattr('attributes.device_class', 'eq', 'moisture')
+                | selectattr('state', 'eq', 'on')
+                | rejectattr('entity_id', 'in', excluded)
+                | map(attribute='name') | list %}
+            Active water leak detected on startup: {{ active_names | join(', ') }}.
+      - service: input_datetime.set_datetime
+        target:
+          entity_id: input_datetime.water_leak_last_notified
+        data:
+          datetime: "{{ now().strftime('%Y-%m-%d %H:%M:%S') }}"
