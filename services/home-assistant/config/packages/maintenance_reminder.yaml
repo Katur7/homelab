@@ -1,6 +1,7 @@
 # Package: Maintenance Reminder
 # Generic interval- and calendar-based maintenance task reminders.
 # See: services/home-assistant/specs/03-maintenance-reminder/plan.md
+#      services/home-assistant/specs/08-shuffle-maintenance-tasks/plan.md
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -91,6 +92,83 @@ script:
                 title: "Snooze 1 day"
               - action: "MAINTENANCE_SNOOZE_WEEK_{{ task_id | upper }}"
                 title: "Snooze 1 week"
+
+  maintenance_shuffle_overdue:
+    alias: "Maintenance: Shuffle Overdue Tasks"
+    icon: "mdi:shuffle-variant"
+    variables:
+      tasks:
+        - id: "ac_filter"
+          name: "Clean AC filters"
+          interval: 14
+        - id: "plant_office"
+          name: "Water office plant"
+          interval: 7
+        - id: "bike_tyre"
+          name: "Check bike tyre pressure"
+          interval: 30
+        - id: "bike_chain"
+          name: "Lube bike chain"
+          interval: 30
+      scheduled_tasks: >-
+        {% set ns = namespace(overdue=[]) %}
+        {% for t in tasks %}
+          {% set last_done = states('input_datetime.maintenance_' ~ t.id ~ '_last_done') | as_datetime(default=now() - timedelta(days=999)) | as_local %}
+          {% set snooze_until = states('input_datetime.maintenance_' ~ t.id ~ '_snooze_until') | as_datetime(default=now() - timedelta(days=1)) | as_local %}
+          {% if (now() - last_done).days >= t.interval and now() > snooze_until %}
+            {% set ns.overdue = ns.overdue + [t] %}
+          {% endif %}
+        {% endfor %}
+        {% set shuffled = ns.overdue | shuffle %}
+        {% set count = shuffled | length %}
+        {% set ns_sched = namespace(items=[]) %}
+        {% for t in shuffled %}
+          {% set idx = loop.index0 %}
+          {% set offset = 2 if count == 1 else (2 + (idx * 12 / (count - 1)) | round) | int %}
+          {% set dt = (now() + timedelta(days=offset)).strftime('%Y-%m-%d 00:00:00') %}
+          {% set display = (now() + timedelta(days=offset)).strftime('%a, %b %d') %}
+          {% set ns_sched.items = ns_sched.items + [{
+            'id': t.id,
+            'name': t.name,
+            'snooze_dt': dt,
+            'display_date': display
+          }] %}
+        {% endfor %}
+        {{ ns_sched.items }}
+    sequence:
+      - if:
+          - condition: template
+            value_template: "{{ scheduled_tasks | length == 0 }}"
+        then:
+          - action: persistent_notification.create
+            data:
+              title: "Maintenance Shuffle"
+              message: "No maintenance tasks are currently overdue. Everything is up to date!"
+              notification_id: "maintenance_shuffle_summary"
+        else:
+          - repeat:
+              for_each: "{{ scheduled_tasks }}"
+              sequence:
+                - action: input_datetime.set_datetime
+                  target:
+                    entity_id: "input_datetime.maintenance_{{ repeat.item.id }}_snooze_until"
+                  data:
+                    datetime: "{{ repeat.item.snooze_dt }}"
+                - action: !secret phone_notify_service
+                  data:
+                    message: clear_notification
+                    data:
+                      tag: "maintenance_{{ repeat.item.id }}"
+          - action: persistent_notification.create
+            data:
+              title: "Maintenance Tasks Shuffled"
+              message: >
+                Shuffled {{ scheduled_tasks | length }} overdue task(s) over the next 2 weeks (starting in 2 days):
+
+                {% for task in scheduled_tasks %}
+                - **{{ task.name }}**: {{ task.display_date }}
+                {% endfor %}
+              notification_id: "maintenance_shuffle_summary"
 
 # ---------------------------------------------------------------------------
 # Automations
