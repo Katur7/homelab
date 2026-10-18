@@ -242,3 +242,31 @@ not possible and an alternative client must be found.
 - **Raspberry Pi OS Lite Bookworm (`pihole-pi`):** Docker group GID is `985` (`user: "65534:985"` in `pi/services/dozzle-agent/compose.yaml`).
 
 **Fix:** Verify the host's actual docker group GID via `getent group docker | cut -d: -f3` and ensure the GID matches in the container's `user:` directive.
+
+---
+
+## Q9: MergerFS `umask` Mount Option Forces `0775` on All Files (Breaks Syncthing & SSH Keys)
+
+**Symptom:** After migrating the NAS storage pool to MergerFS (`/mnt/storage`), every file inside Syncthing shares (`/mnt/storage/syncthing`, `/mnt/storage/code`) had its permissions changed to `0775` (`-rwxrwxr-x`), which Syncthing then propagated to all connected devices. Any SSH private key stored in a synced folder failed with `UNPROTECTED PRIVATE KEY FILE! Permissions 0775 ... are too open`, and Git repositories saw executable bits flipped on all files.
+
+**Root cause:** Two compounding issues from the initial MergerFS setup:
+1. **`umask=002` in `/etc/fstab` (`fuse.mergerfs`):** Unlike a shell or process `umask` (which only masks permissions at file creation time), the FUSE mount option `umask=M` overrides `stat()` (`getattr`) across the entire FUSE mount. `libfuse` unconditionally masks `st_mode` to `~002` (`0775`) for **every** file and directory reported through `/mnt/storage`, completely ignoring the underlying `ext4` permissions on `/srv/disk*` and rendering `chmod` ineffective through the mount.
+2. **Recursive `chmod -R 2775 /mnt/storage`:** Running `chmod -R 2775` applied executable and group-write bits (`0775`) to all existing regular files on `/srv/disk1..3`, rather than only directories.
+
+**Fix:**
+1. Remove `umask=002` from the `/mnt/storage` `fuse.mergerfs` options in `/etc/fstab`:
+   ```text
+   /srv/disk*  /mnt/storage  fuse.mergerfs  defaults,nonempty,allow_other,use_ino,cache.files=partial,category.create=mfs,minfreespace=50G,fsname=mergerfs,x-systemd.requires-mounts-for=/srv/disk1,x-systemd.requires-mounts-for=/srv/disk2,x-systemd.requires-mounts-for=/srv/disk3  0 0
+   ```
+2. Remount `/mnt/storage` (or reboot / stop containers using `/mnt/storage`, `umount /mnt/storage && mount /mnt/storage`).
+3. Apply SetGID (`2775`) **only to directories**, and reset regular file modes (`644` for files, `755` for `.sh` scripts):
+   ```bash
+   sudo find /mnt/storage -type d -exec chmod 2775 {} +
+   sudo find /mnt/storage/code /mnt/storage/syncthing -type f -exec chmod 644 {} +
+   sudo find /mnt/storage/code /mnt/storage/syncthing -type f -name "*.sh" -exec chmod 755 {} +
+   ```
+
+**Side notes:**
+- Keep SSH private keys in `~/.ssh/` (mode `0600`) per host rather than inside Syncthing-managed folders.
+- Group inheritance on new files/directories in `/mnt/storage` is handled by SetGID (`2775`) on directories combined with Samba's `create mask = 0664` / `directory mask = 0775` and Docker's `PUID=1000`/`PGID=1000`.
+

@@ -1,0 +1,217 @@
+# Package: Awning Controller
+# Integrates Somfy Soliris sun/wind sensor with Shelly Plus 2PM in Cover mode.
+# Spec: services/home-assistant/specs/06-awning-controller/plan.md
+
+# ---------------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------------
+
+input_boolean:
+  awning_automation_enabled:
+    name: "Awning Automations Enabled"
+    icon: "mdi:robot"
+    initial: true
+  awning_manual_override:
+    name: "Awning Manual Override"
+    icon: "mdi:hand-back-right"
+    initial: false
+
+input_number:
+  awning_sun_threshold_extend:
+    name: "Sun Threshold (Extend)"
+    min: 0
+    max: 100
+    step: 1
+    unit_of_measurement: "%"
+    icon: "mdi:weather-sunny"
+    initial: 65
+  awning_sun_threshold_retract:
+    name: "Sun Threshold (Retract)"
+    min: 0
+    max: 100
+    step: 1
+    unit_of_measurement: "%"
+    icon: "mdi:weather-partly-cloudy"
+    initial: 35
+
+input_datetime:
+  awning_active_start:
+    name: "Awning Active Start Time"
+    has_date: false
+    has_time: true
+    initial: "08:30:00"
+    icon: "mdi:clock-start"
+  awning_active_end:
+    name: "Awning Active End Time"
+    has_date: false
+    has_time: true
+    initial: "18:00:00"
+    icon: "mdi:clock-end"
+
+# ---------------------------------------------------------------------------
+# Template Sensors (from Shelly Script Event entity: event.awning_wind_safety)
+# ---------------------------------------------------------------------------
+
+template:
+  - binary_sensor:
+      - name: "Awning Wind Lockout"
+        unique_id: awning_wind_lockout
+        device_class: safety
+        icon: "mdi:weather-windy-variant"
+        availability: >
+          {{ states('event.awning_wind_safety') not in ['unavailable', 'unknown'] }}
+        state: >
+          {{ state_attr('event.awning_wind_safety', 'locked') == true }}
+    sensor:
+      - name: "Awning Wind Pulses"
+        unique_id: awning_wind_pulses
+        unit_of_measurement: "pulses"
+        state_class: measurement
+        icon: "mdi:wind-turbine"
+        availability: >
+          {{ states('event.awning_wind_safety') not in ['unavailable', 'unknown'] }}
+        state: >
+          {{ state_attr('event.awning_wind_safety', 'pulses') | int(0) }}
+
+# ---------------------------------------------------------------------------
+# Automations
+# ---------------------------------------------------------------------------
+
+automation:
+  # 1. Auto-Extend on sustained sunlight (>10 minutes)
+  - id: awning_sunny_day_auto_extend
+    alias: "Awning: Sunny Day Auto-Extend"
+    description: "Extends the awning when sun exposure is sustained for 10 minutes, within operating hours, without wind lockout or manual override."
+    triggers:
+      - trigger: numeric_state
+        entity_id: sensor.outdoor_shelly_markiser_awning_somfy_sun_sensor_analogue
+        above: input_number.awning_sun_threshold_extend
+        for:
+          minutes: 10
+    conditions:
+      - condition: state
+        entity_id: input_boolean.awning_automation_enabled
+        state: "on"
+      - condition: state
+        entity_id: input_boolean.awning_manual_override
+        state: "off"
+      - condition: state
+        entity_id: binary_sensor.awning_wind_lockout
+        state: "off"
+      - condition: state
+        entity_id: cover.outdoor_shelly_markiser_awning
+        state: "closed"
+      - condition: time
+        after: input_datetime.awning_active_start
+        before: input_datetime.awning_active_end
+    actions:
+      - action: cover.open_cover
+        target:
+          entity_id: cover.outdoor_shelly_markiser_awning
+      - action: logbook.log
+        data:
+          name: "Awning Controller"
+          message: "Auto-extended awning due to sustained sunlight."
+          entity_id: cover.outdoor_shelly_markiser_awning
+
+  # 2. Low-Light / Evening Auto-Retract
+  - id: awning_low_light_auto_retract
+    alias: "Awning: Low-Light / Evening Auto-Retract"
+    description: "Retracts the awning when sunlight drops below threshold for 20 minutes, at sunset, or when operating hours end."
+    triggers:
+      - trigger: numeric_state
+        entity_id: sensor.outdoor_shelly_markiser_awning_somfy_sun_sensor_analogue
+        below: input_number.awning_sun_threshold_retract
+        for:
+          minutes: 20
+      - trigger: time
+        at: input_datetime.awning_active_end
+      - trigger: sun
+        event: sunset
+    conditions:
+      - condition: state
+        entity_id: cover.outdoor_shelly_markiser_awning
+        state: "open"
+    actions:
+      - action: cover.close_cover
+        target:
+          entity_id: cover.outdoor_shelly_markiser_awning
+      - action: logbook.log
+        data:
+          name: "Awning Controller"
+          message: "Auto-retracted awning due to low light, sunset, or end of active window."
+          entity_id: cover.outdoor_shelly_markiser_awning
+
+  # 3. Manual Wall Switch / User Override Detection
+  - id: awning_manual_override_detected
+    alias: "Awning: Manual Override Detected"
+    description: "Engages manual override flag if awning is manually retracted during peak daytime sun."
+    triggers:
+      - trigger: state
+        entity_id: cover.outdoor_shelly_markiser_awning
+        to: "closed"
+    conditions:
+      - condition: state
+        entity_id: input_boolean.awning_automation_enabled
+        state: "on"
+      - condition: state
+        entity_id: input_boolean.awning_manual_override
+        state: "off"
+      - condition: state
+        entity_id: binary_sensor.awning_wind_lockout
+        state: "off"
+      - condition: time
+        after: input_datetime.awning_active_start
+        before: input_datetime.awning_active_end
+      - condition: numeric_state
+        entity_id: sensor.outdoor_shelly_markiser_awning_somfy_sun_sensor_analogue
+        above: input_number.awning_sun_threshold_retract
+    actions:
+      - action: input_boolean.turn_on
+        target:
+          entity_id: input_boolean.awning_manual_override
+      - action: logbook.log
+        data:
+          name: "Awning Controller"
+          message: "Manual closure detected during sunny hours — manual override engaged."
+          entity_id: input_boolean.awning_manual_override
+
+  # 4. Manual Override Reset
+  - id: awning_manual_override_reset
+    alias: "Awning: Manual Override Reset"
+    description: "Resets manual override at midnight or when awning is manually opened."
+    triggers:
+      - trigger: time
+        at: "00:00:00"
+      - trigger: state
+        entity_id: cover.outdoor_shelly_markiser_awning
+        to: "open"
+    conditions:
+      - condition: state
+        entity_id: input_boolean.awning_manual_override
+        state: "on"
+    actions:
+      - action: input_boolean.turn_off
+        target:
+          entity_id: input_boolean.awning_manual_override
+      - action: logbook.log
+        data:
+          name: "Awning Controller"
+          message: "Manual override reset."
+          entity_id: input_boolean.awning_manual_override
+
+  # 5. Wind Monitor Watchdog Alert
+  - id: awning_wind_monitor_watchdog
+    alias: "Awning: Wind Monitor Watchdog"
+    description: "Logs a warning if the Shelly wind monitor 10s heartbeat stops updating for >5 minutes."
+    triggers:
+      - trigger: state
+        entity_id: event.awning_wind_safety
+        for:
+          minutes: 5
+    actions:
+      - action: logbook.log
+        data:
+          name: "Awning Controller"
+          message: "Warning: Shelly wind monitor script heartbeat has not updated for >5 minutes."
+          entity_id: event.awning_wind_safety
