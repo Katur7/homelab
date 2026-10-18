@@ -9,7 +9,7 @@
 | **Host Identity & Fleet Parity** | **`grimur` (UID 1000, GID 1000)** | Full parity with Raspberry Pi (`ssh grimur@...`, `/home/grimur/homelab`). Replaces OMV's legacy `PGID=100` with standard Linux User Private Groups (`PGID=1000`). Supplementary group `users` (GID 100) retained for compatibility. |
 | **Host Hardening** | **Key-Only SSH, Fail2Ban & Unattended Upgrades** | Parity with Pi Milestone 08.3 & OMV 07.4: `PasswordAuthentication no`, `PermitRootLogin no`, Fail2Ban SSH jail with ban-only email alerts, `unattended-upgrades` active, journald capped at 1GB. |
 | **Storage Architecture** | **MergerFS + SnapRAID** | Pools data drives into `/mnt/storage` for unified capacity and atomic hardlinks for Starr apps, while preserving disk-level SnapRAID parity protection. |
-| **Storage Permissions** | **SetGID (`chmod 2775`) on `/mnt/storage`** | Owned by `grimur:grimur` with `umask=002` in MergerFS. New files/subfolders automatically inherit group write access across Docker (PUID/PGID 1000), SSH, and Samba. |
+| **Storage Permissions** | **SetGID (`chmod 2775`) on `/mnt/storage` directories** | Owned by `grimur:grimur`. New files/subfolders automatically inherit group `grimur` across Docker (PUID/PGID 1000), SSH, and Samba. |
 | **Network File Sharing** | **Samba (`smb.conf`)** | Authenticated user `grimur` for full read/write access. Read-only guest access for media streaming to smart TVs / media players. |
 | **Networking** | **`systemd-networkd`** | Native, lightweight static IP configuration (`192.168.86.17/24`) with hostname `pippinn` retained for Tailscale, DNS, and Uptime Kuma continuity. |
 | **SnapRAID Automation** | **Systemd Service & Timer (`scripts/`)** | Replaces OMV GUI plugin. Nightly sync with safety delete-threshold check and notification hook, plus weekly scrub. |
@@ -54,19 +54,19 @@
    UUID=<UUID-PARITY>  /srv/parity1  ext4   defaults,noatime   0 2
 
    # MergerFS Unified Storage Pool (waits for physical disks to prevent race conditions)
-   /srv/disk*          /mnt/storage  fuse.mergerfs  defaults,nonempty,allow_other,use_ino,cache.files=partial,category.create=mfs,minfreespace=50G,fsname=mergerfs,umask=002,x-systemd.requires-mounts-for=/srv/disk1,x-systemd.requires-mounts-for=/srv/disk2,x-systemd.requires-mounts-for=/srv/disk3  0 0
+   /srv/disk*          /mnt/storage  fuse.mergerfs  defaults,nonempty,allow_other,use_ino,cache.files=partial,category.create=mfs,minfreespace=50G,fsname=mergerfs,x-systemd.requires-mounts-for=/srv/disk1,x-systemd.requires-mounts-for=/srv/disk2,x-systemd.requires-mounts-for=/srv/disk3  0 0
    ```
 
    > **Policy `category.create=mfs` (Most Free Space):** Writes new files to whichever physical drive currently has the most free space.
-   > **`umask=002`:** Ensures files created by containers or users are group-writable by default.
+   > **Note on `umask`:** Do **not** pass `umask=002` to `fuse.mergerfs`—FUSE `umask` overrides `stat()` to report `0775` on all files, ignoring underlying ext4 file permissions (see `QUIRKS.md` Q9).
 
 ### 2.3 Directory Structure & SetGID Permissions
 
-Set up the unified directory structure under `/mnt/storage/` with SetGID permissions:
+Set up the unified directory structure under `/mnt/storage/` with SetGID permissions on directories only:
 ```bash
 sudo mkdir -p /mnt/storage/{media/{movies,tv,books,audiobooks},downloads/{complete,incomplete},photos,backup}
 sudo chown -R grimur:grimur /mnt/storage
-sudo chmod -R 2775 /mnt/storage
+sudo find /mnt/storage -type d -exec chmod 2775 {} +
 ```
 
 > [!TIP]
@@ -457,7 +457,7 @@ Update `.gitignore` to allow tracked `.env` while strictly ignoring secrets:
      UUID=9e6b2fd0-7b7e-4045-bd96-c2e925089d1a   /srv/parity1  ext4   defaults,noatime   0 2
 
      # MergerFS Unified Storage Pool
-     /srv/disk*          /mnt/storage  fuse.mergerfs  defaults,nonempty,allow_other,use_ino,cache.files=partial,category.create=mfs,minfreespace=50G,fsname=mergerfs,umask=002,x-systemd.requires-mounts-for=/srv/disk1,x-systemd.requires-mounts-for=/srv/disk2,x-systemd.requires-mounts-for=/srv/disk3  0 0
+     /srv/disk*          /mnt/storage  fuse.mergerfs  defaults,nonempty,allow_other,use_ino,cache.files=partial,category.create=mfs,minfreespace=50G,fsname=mergerfs,x-systemd.requires-mounts-for=/srv/disk1,x-systemd.requires-mounts-for=/srv/disk2,x-systemd.requires-mounts-for=/srv/disk3  0 0
      ```
    * Configure `/etc/fuse.conf`:
      ```bash
@@ -468,10 +468,10 @@ Update `.gitignore` to allow tracked `.env` while strictly ignoring secrets:
      sudo mount -a
      df -h /mnt/storage /srv/disk* /srv/parity1
      ```
-   * Apply SetGID directory permissions:
+   * Apply SetGID directory permissions (directories only):
      ```bash
      sudo chown -R grimur:grimur /mnt/storage
-     sudo chmod -R 2775 /mnt/storage
+     sudo find /mnt/storage -type d -exec chmod 2775 {} +
      ```
    * Normalize existing HDD file ownership if necessary:
      ```bash
