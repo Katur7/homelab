@@ -202,18 +202,46 @@ automation:
           message: "Manual override reset."
           entity_id: input_boolean.awning_manual_override
 
-  # 5. Wind Monitor Watchdog Alert
+  # 5. Wind Lockout Activity Logger
+  - id: awning_wind_lockout_activity_log
+    alias: "Awning: Wind Lockout Activity Log"
+    description: "Writes a clear message with pulse count to the Activity log when wind lockout engages or clears."
+    triggers:
+      - trigger: state
+        entity_id: binary_sensor.awning_wind_lockout
+        from:
+          - "off"
+          - "on"
+        to:
+          - "on"
+          - "off"
+    actions:
+      - action: logbook.log
+        data:
+          name: "Awning Wind Safety"
+          message: >
+            {% if trigger.to_state.state == 'on' %}
+              High wind detected ({{ states('sensor.awning_wind_pulses') }} pulses/2s) — awning retracted and locked out for 15 minutes.
+            {% else %}
+              Wind lockout cleared after 15 minutes of calm.
+            {% endif %}
+          entity_id: cover.outdoor_shelly_markiser_awning
+
+  # 6. Wind Monitor Watchdog Alert
   - id: awning_wind_monitor_watchdog
     alias: "Awning: Wind Monitor Watchdog"
-    description: "Logs a warning if the Shelly wind monitor 10s heartbeat stops updating for >5 minutes."
+    description: "Logs a warning if the Shelly wind monitor entity becomes unavailable or unknown for >5 minutes."
     triggers:
       - trigger: state
         entity_id: event.awning_wind_safety
+        to:
+          - "unavailable"
+          - "unknown"
         for:
           minutes: 5
     actions:
       - action: logbook.log
         data:
           name: "Awning Controller"
-          message: "Warning: Shelly wind monitor script heartbeat has not updated for >5 minutes."
+          message: "Warning: Shelly wind monitor entity is unavailable (>5 minutes)."
           entity_id: event.awning_wind_safety

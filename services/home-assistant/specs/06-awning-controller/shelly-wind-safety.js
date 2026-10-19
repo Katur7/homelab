@@ -18,7 +18,7 @@ var CONFIG = {
   LOCKOUT_TIME_MS: 900000,      // 15 minutes of calm required to clear lockout
   BOOT_GRACE_MS: 60000,         // 60-second initial lockout on reboot
   DEBOUNCE_TIME_MS: 15,         // 15 ms minimum pulse interval (filters contact bounce)
-  HEARTBEAT_INTERVAL_MS: 10000  // 10 seconds telemetry & heartbeat update
+  TELEMETRY_INTERVAL_MS: 10000  // 10 seconds check to report changed pulse counts
 };
 
 var state = {
@@ -27,12 +27,14 @@ var state = {
   consecutiveWindWindows: 0,
   isLocked: true,
   lockoutTimerHandle: null,
-  lastReportedPulses: 0
+  lastReportedPulses: 0,
+  lastEmittedPulses: -1
 };
 
 // Emit events to Home Assistant via native Shelly RPC WebSocket.
 // Literal event names MUST be passed directly to Shelly.emitEvent for HA discovery.
 function publishLockout(pulses) {
+  state.lastEmittedPulses = pulses;
   Shelly.emitEvent("wind_lockout", {
     locked: true,
     pulses: pulses
@@ -40,6 +42,7 @@ function publishLockout(pulses) {
 }
 
 function publishClear() {
+  state.lastEmittedPulses = 0;
   Shelly.emitEvent("wind_clear", {
     locked: false,
     pulses: 0
@@ -47,6 +50,10 @@ function publishClear() {
 }
 
 function publishTelemetry() {
+  if (state.lastReportedPulses === state.lastEmittedPulses) {
+    return;
+  }
+  state.lastEmittedPulses = state.lastReportedPulses;
   Shelly.emitEvent("wind_telemetry", {
     locked: state.isLocked,
     pulses: state.lastReportedPulses
@@ -127,9 +134,9 @@ Timer.set(CONFIG.CHECK_INTERVAL_MS, true, function () {
 });
 
 // ==========================================
-// HEARTBEAT & TELEMETRY TIMER (Every 10 seconds)
+// TELEMETRY TIMER (Every 10s, only emits when pulse count changes)
 // ==========================================
-Timer.set(CONFIG.HEARTBEAT_INTERVAL_MS, true, function () {
+Timer.set(CONFIG.TELEMETRY_INTERVAL_MS, true, function () {
   publishTelemetry();
 });
 
