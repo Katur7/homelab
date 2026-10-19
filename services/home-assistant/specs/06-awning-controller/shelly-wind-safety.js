@@ -1,6 +1,10 @@
 /**
  * Shelly Plus 2PM mJS Script: Awning Wind Safety Monitor & Telemetry
  *
+ * WIRING & DIRECTION MAPPING:
+ *   - O1 (Cover.Open  / Up arrow ▲)   = Retract awning (roll UP)
+ *   - O2 (Cover.Close / Down arrow ▼) = Extend awning  (roll DOWN)
+ *
  * NOTE: Keep Shelly.emitEvent(...) calls within the first 5 KB of this file
  * so Home Assistant's Shelly integration automatically discovers the event types.
  */
@@ -52,12 +56,12 @@ function publishTelemetry() {
 function triggerWindSafety(pulses) {
   print("WIND SAFETY TRIP! Pulses counted:", pulses);
 
-  // 1. Immediately issue local cover close command
-  Shelly.call("Cover.Close", { id: CONFIG.COVER_ID }, function (res, err) {
+  // 1. Immediately issue local cover retract command (Cover.Open = O1 = Up/Retract)
+  Shelly.call("Cover.Open", { id: CONFIG.COVER_ID }, function (res, err) {
     if (err) {
-      print("Error issuing Cover.Close:", JSON.stringify(err));
+      print("Error issuing Cover.Open (Retract):", JSON.stringify(err));
     } else {
-      print("Cover.Close issued successfully.");
+      print("Cover.Open (Retract) issued successfully.");
     }
   });
 

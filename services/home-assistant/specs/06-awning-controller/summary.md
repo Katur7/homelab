@@ -12,7 +12,7 @@ Replaced the decommissioned Somfy Soliris Uno controller with a Shelly Plus 2PM 
 - **Cover Profile (Time-Based Limits)**: Configured in `Cover` mode with 22-second open/close duration limits (`maxtime_open` / `maxtime_close`) and obstacle detection disabled to accommodate the intermediate motor relay box.
 - **Local Wind Safety (`shelly-wind-safety.js`)**:
   - Counts reed switch pulses on `input:100` with a 15 ms software debounce over a 2-second sliding window.
-  - Immediately executes `Cover.Close` locally when pulses reach $\ge 10$ per 2s window and activates a sliding 15-minute calm lockout (with a 60s boot grace period).
+  - Immediately executes `Cover.Open` (Up/Retract) locally when pulses reach $\ge 10$ per 2s window and activates a sliding 15-minute calm lockout (with a 60s boot grace period).
   - Emits `wind_lockout`, `wind_clear`, and 10-second `wind_telemetry` events via `Shelly.emitEvent()` to `event.awning_wind_safety`.
 - **Home Assistant Package (`awning_controller.yaml`)**:
   - Maps `event.awning_wind_safety` attributes (`locked`, `pulses`) to `binary_sensor.awning_wind_lockout` and `sensor.awning_wind_pulses`.

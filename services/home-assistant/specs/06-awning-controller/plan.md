@@ -141,7 +141,7 @@ The package provides:
   - While awning is extended, spin the Somfy Soliris anemometer wheel by hand.
   - Observe `sensor.awning_wind_pulses` updating in Home Assistant.
   - Spin briskly to reach $\ge 10$ pulses in a 2-second window.
-  - **Verify immediate retraction**: Shelly issues `Cover.Close` and `binary_sensor.awning_wind_lockout` switches to `on` in Home Assistant.
+  - **Verify immediate retraction**: Shelly issues `Cover.Open` (Up/Retract) and `binary_sensor.awning_wind_lockout` switches to `on` in Home Assistant.
 - [ ] **Sliding Lockout Test**:
   - Spin the anemometer again at minute 5: verify script logs indicate sliding lockout timer refresh.
   - Allow 15 uninterrupted minutes of calm: verify lockout clears and switches to `off`.
