@@ -23,3 +23,8 @@ zha:
           url: https://raw.githubusercontent.com/Koenkk/zigbee-OTA/master/index.json
 
 svt_play:
+
+logbook:
+  exclude:
+    entities:
+      - event.awning_wind_safety

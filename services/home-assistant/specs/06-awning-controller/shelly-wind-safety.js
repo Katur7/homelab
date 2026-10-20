@@ -1,6 +1,10 @@
 /**
  * Shelly Plus 2PM mJS Script: Awning Wind Safety Monitor & Telemetry
  *
+ * WIRING & DIRECTION MAPPING:
+ *   - O1 (Cover.Open  / Up arrow ▲)   = Retract awning (roll UP)
+ *   - O2 (Cover.Close / Down arrow ▼) = Extend awning  (roll DOWN)
+ *
  * NOTE: Keep Shelly.emitEvent(...) calls within the first 5 KB of this file
  * so Home Assistant's Shelly integration automatically discovers the event types.
  */
@@ -14,7 +18,7 @@ var CONFIG = {
   LOCKOUT_TIME_MS: 900000,      // 15 minutes of calm required to clear lockout
   BOOT_GRACE_MS: 60000,         // 60-second initial lockout on reboot
   DEBOUNCE_TIME_MS: 15,         // 15 ms minimum pulse interval (filters contact bounce)
-  HEARTBEAT_INTERVAL_MS: 10000  // 10 seconds telemetry & heartbeat update
+  TELEMETRY_INTERVAL_MS: 10000  // 10 seconds check to report changed pulse counts
 };
 
 var state = {
@@ -23,12 +27,14 @@ var state = {
   consecutiveWindWindows: 0,
   isLocked: true,
   lockoutTimerHandle: null,
-  lastReportedPulses: 0
+  lastReportedPulses: 0,
+  lastEmittedPulses: -1
 };
 
 // Emit events to Home Assistant via native Shelly RPC WebSocket.
 // Literal event names MUST be passed directly to Shelly.emitEvent for HA discovery.
 function publishLockout(pulses) {
+  state.lastEmittedPulses = pulses;
   Shelly.emitEvent("wind_lockout", {
     locked: true,
     pulses: pulses
@@ -36,6 +42,7 @@ function publishLockout(pulses) {
 }
 
 function publishClear() {
+  state.lastEmittedPulses = 0;
   Shelly.emitEvent("wind_clear", {
     locked: false,
     pulses: 0
@@ -43,6 +50,10 @@ function publishClear() {
 }
 
 function publishTelemetry() {
+  if (state.lastReportedPulses === state.lastEmittedPulses) {
+    return;
+  }
+  state.lastEmittedPulses = state.lastReportedPulses;
   Shelly.emitEvent("wind_telemetry", {
     locked: state.isLocked,
     pulses: state.lastReportedPulses
@@ -52,12 +63,12 @@ function publishTelemetry() {
 function triggerWindSafety(pulses) {
   print("WIND SAFETY TRIP! Pulses counted:", pulses);
 
-  // 1. Immediately issue local cover close command
-  Shelly.call("Cover.Close", { id: CONFIG.COVER_ID }, function (res, err) {
+  // 1. Immediately issue local cover retract command (Cover.Open = O1 = Up/Retract)
+  Shelly.call("Cover.Open", { id: CONFIG.COVER_ID }, function (res, err) {
     if (err) {
-      print("Error issuing Cover.Close:", JSON.stringify(err));
+      print("Error issuing Cover.Open (Retract):", JSON.stringify(err));
     } else {
-      print("Cover.Close issued successfully.");
+      print("Cover.Open (Retract) issued successfully.");
     }
   });
 
@@ -123,9 +134,9 @@ Timer.set(CONFIG.CHECK_INTERVAL_MS, true, function () {
 });
 
 // ==========================================
-// HEARTBEAT & TELEMETRY TIMER (Every 10 seconds)
+// TELEMETRY TIMER (Every 10s, only emits when pulse count changes)
 // ==========================================
-Timer.set(CONFIG.HEARTBEAT_INTERVAL_MS, true, function () {
+Timer.set(CONFIG.TELEMETRY_INTERVAL_MS, true, function () {
   publishTelemetry();
 });
 
