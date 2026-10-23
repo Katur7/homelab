@@ -1,5 +1,5 @@
-# Package: Awning Controller (Passive Sensor Telemetry Only)
-# Exposes Shelly Add-on wind pulse telemetry to Home Assistant without any automations.
+# Package: Awning Controller
+# Exposes Shelly Add-on wind pulse telemetry and sunset retraction automation.
 # Spec: services/home-assistant/specs/06-awning-controller/plan.md
 
 # ---------------------------------------------------------------------------
@@ -26,3 +26,32 @@ template:
           {{ states('event.awning_wind_safety') not in ['unavailable', 'unknown'] }}
         state: >
           {{ state_attr('event.awning_wind_safety', 'pulses') | int(0) }}
+
+# ---------------------------------------------------------------------------
+# Automations
+# ---------------------------------------------------------------------------
+
+automation:
+  - id: awning_retract_after_sunset
+    alias: "Awning: Retract 30m After Sunset"
+    description: "Retracts (rolls up) the awning 30 minutes after sunset if it is extended."
+    triggers:
+      - trigger: sun
+        event: sunset
+        offset: "00:30:00"
+    conditions:
+      # State "closed" = Awning is currently rolled DOWN (extended)
+      - condition: state
+        entity_id: cover.outdoor_shelly_markiser_awning
+        state: "closed"
+    actions:
+      # cover.open_cover = O1 (Up arrow ▲) = Roll UP (Retract)
+      - action: cover.open_cover
+        target:
+          entity_id: cover.outdoor_shelly_markiser_awning
+      - action: logbook.log
+        data:
+          name: "Awning Controller"
+          message: "Auto-retracted awning 30 minutes after sunset."
+          entity_id: cover.outdoor_shelly_markiser_awning
+
