@@ -83,3 +83,4 @@
 /home/grimur/homelab/services/starr/prowlarr-config/Sentry/
 /home/grimur/homelab/services/starr/prowlarr-config/Definitions/
 /home/grimur/homelab/services/syncthing/config/index-v2/
+/home/grimur/homelab/services/laya/cache/
