@@ -16,6 +16,7 @@ sensor: !include_dir_merge_list sensors/
 notify: !include notify.yaml
 
 zha:
+  custom_quirks_path: /config/zha_quirks/
   zigpy_config:
     ota:
       extra_providers:

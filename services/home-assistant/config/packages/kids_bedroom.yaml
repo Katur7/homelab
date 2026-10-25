@@ -12,40 +12,6 @@ input_boolean:
     initial: true
 
 # ---------------------------------------------------------------------------
-# Template Binary Sensor for Shelly Detached Input (via ZHA Events)
-# ---------------------------------------------------------------------------
-
-template:
-  - triggers:
-      - trigger: event
-        event_type: zha_event
-    conditions:
-      - condition: template
-        value_template: >-
-          {{ trigger.event.data.device_id == device_id('switch.shelly_1_kids')
-             and (trigger.event.data.command | lower) in ['on', 'off'] }}
-    binary_sensor:
-      - name: "Shelly 1 Kids Input"
-        unique_id: shelly_1_kids_input
-        icon: mdi:light-switch
-        state: "{{ (trigger.event.data.command | lower) == 'on' }}"
-
-# ---------------------------------------------------------------------------
-# Light Group Fallback
-# (Native ZHA Zigbee Group light.kids_bedroom_lights is preferred for multicast;
-# this group acts as an immediate fallback).
-# ---------------------------------------------------------------------------
-
-light:
-  - platform: group
-    name: "Kids Bedroom Bulbs"
-    unique_id: kids_bedroom_bulbs_group
-    entities:
-      - light.ikea_kids1
-      - light.ikea_kids2
-      - light.ikea_kids3
-
-# ---------------------------------------------------------------------------
 # Scripts
 # ---------------------------------------------------------------------------
 
@@ -91,8 +57,7 @@ script:
       # 4. Turn on lights at minimum brightness (1%) and reset color temperature to 2700K
       - action: light.turn_on
         target:
-          entity_id: >-
-            {{ 'light.kids_bedroom_lights' if states('light.kids_bedroom_lights') not in ['unavailable', 'unknown', 'none'] else 'light.kids_bedroom_bulbs' }}
+          entity_id: light.kids_bedroom_lights
         data:
           brightness_pct: 1
           color_temp_kelvin: 2700
@@ -100,8 +65,7 @@ script:
       # 5. Native 15-minute (900s) hardware transition to 100% brightness
       - action: light.turn_on
         target:
-          entity_id: >-
-            {{ 'light.kids_bedroom_lights' if states('light.kids_bedroom_lights') not in ['unavailable', 'unknown', 'none'] else 'light.kids_bedroom_bulbs' }}
+          entity_id: light.kids_bedroom_lights
         data:
           brightness_pct: 100
           transition: 900
@@ -143,8 +107,7 @@ script:
           entity_id: media_player.jukebox_jukebox
       - action: light.turn_off
         target:
-          entity_id: >-
-            {{ 'light.kids_bedroom_lights' if states('light.kids_bedroom_lights') not in ['unavailable', 'unknown', 'none'] else 'light.kids_bedroom_bulbs' }}
+          entity_id: light.kids_bedroom_lights
 
 # ---------------------------------------------------------------------------
 # Automations
@@ -171,22 +134,3 @@ automation:
           - fri
     actions:
       - action: script.kids_bedroom_morning_wakeup
-
-  # 2. Sync Bulb State in HA when Shelly Input Changes
-  # Since the Shelly is direct-bound to the ZHA light group, the bulbs turn on/off
-  # directly over Zigbee (working even if HA is down), and this automation keeps
-  # the light controls in HA synchronized with the input state.
-  - id: shelly_kids_sync_bulb_state
-    alias: "Shelly Kids Bedroom: Sync Bulb State on Switch Toggle"
-    description: "Updates the HA light controls whenever the Shelly detached input changes state."
-    mode: restart
-    triggers:
-      - trigger: state
-        entity_id: binary_sensor.shelly_1_kids_input
-        to:
-          - "on"
-          - "off"
-    actions:
-      - action: "light.turn_{{ trigger.to_state.state }}"
-        target:
-          entity_id: light.kids_bedroom_bulbs
