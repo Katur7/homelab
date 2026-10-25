@@ -65,35 +65,94 @@ def _sanitize_floats(obj: Any) -> Any:
     return obj
 
 
+def _wrap_unpadded_system_one(agent):
+    """Wrap `agent.system_one` so each question runs at its exact unpadded length (B=1).
+
+    Why:
+      1. `device` (~220 tokens) is 5.5x longer than `is_query` (~38 tokens). Collating all 4
+         questions into one padded batch (4 x 220 = 880 tokens) wastes ~50% of CPU compute on
+         `<pad>` tokens and ~65% of quadratic O(L^2) self-attention.
+      2. In `mmBERT` (local sliding window +/-64 tokens), padding a 38-token question to 220
+         tokens leaves padded positions >= 102 with zero unmasked keys in their +/-64 window,
+         causing OpenVINO SDPA to divide 0/0 = NaN. Running each question unpadded (B=1) keeps
+         `attention_mask` and `marker_mask` 100% ones.
+    """
+    if getattr(agent, "_unpadded_wrapped", False):
+        return agent
+    orig_system_one = agent.system_one
+
+    def unpadded_system_one(state, questions):
+        if len(questions) <= 1:
+            return orig_system_one(state, questions)
+        merged: Dict[str, Any] = {}
+        for qid, qdef in questions.items():
+            part = orig_system_one(state, {qid: qdef})
+            if not merged:
+                merged = {
+                    "model": part.get("model", "laya-rl-agent"),
+                    "answers": dict(part.get("answers", {})),
+                    "usage": dict(part.get("usage", {"input_tokens": 0, "output_tokens": 0})),
+                }
+            else:
+                merged["answers"].update(part.get("answers", {}))
+                merged["usage"]["input_tokens"] += part.get("usage", {}).get("input_tokens", 0)
+        return merged
+
+    agent.system_one = unpadded_system_one
+    agent.predict = unpadded_system_one
+    agent._unpadded_wrapped = True
+    return agent
+
+
 def _verify_agent_finite(agent) -> bool:
-    """Run a multi-row test batch (including padding across choice & noul) to verify no NaN/Inf occurs."""
-    test_qs = hschema.build_questions(
-        hschema.DEFAULT_ENTITIES, hschema.DEFAULT_AREAS, "Kveiktu ljósin í svefnherberginu"
-    )
-    res = agent.system_one({"command": "Kveiktu ljósin í svefnherberginu"}, test_qs)
-    return _is_all_finite(res.get("answers", {}))
+    """Run a full 4-question evaluation on `agent` and verify all outputs are finite."""
+    try:
+        test_qs = hschema.build_questions(
+            hschema.DEFAULT_ENTITIES, hschema.DEFAULT_AREAS, "Kveiktu ljósin í svefnherberginu"
+        )
+        res = agent.system_one({"command": "Kveiktu ljósin í svefnherberginu"}, test_qs)
+        ans = res.get("answers", {})
+        return bool(ans) and _is_all_finite(ans)
+    except Exception as e:
+        print(f"  [Self-Test] Agent verification raised {type(e).__name__}: {e}")
+        return False
 
 
-def _ensure_openvino_int8(name: str, cache_root: str) -> Optional[str]:
-    """Export (with FP32 activations/constants) and INT8-quantize weights in `cache_root`."""
-    # Remove legacy v1 cache that exported with compress_to_fp16=True (causes FP16 overflow/NaN on mmBERT)
-    legacy_dir = os.path.join(cache_root, f"laya-ov-int8-{name}")
-    if os.path.exists(legacy_dir):
-        shutil.rmtree(legacy_dir, ignore_errors=True)
+def _try_build_ov_agent(name: str, cache_root: str, ov_dev: str):
+    """Build or load a verified OpenVINO agent (INT8 preferred, FP32 fallback)."""
+    # Clean up older cache directories
+    for old_prefix in ("laya-ov-int8-", "laya-ov-int8-fp32act-"):
+        old_dir = os.path.join(cache_root, f"{old_prefix}{name}")
+        if os.path.exists(old_dir):
+            shutil.rmtree(old_dir, ignore_errors=True)
 
-    ov_dir = os.path.join(cache_root, f"laya-ov-int8-fp32act-{name}")
-    xml_path = os.path.join(ov_dir, "openvino_model.xml")
-    if os.path.isfile(xml_path):
-        return ov_dir
+    ov_dir = os.path.join(cache_root, f"laya-ov-v3-{name}")
+    skip_marker = os.path.join(ov_dir, ".skip_ov")
+    if os.path.exists(skip_marker):
+        return None
 
     try:
         import nncf
         import openvino as ov
-        from laya.ov import export as ov_export
+        from laya.ov import OVAgent, export as ov_export
         from laya.router import DEFAULT_MODELS, _split
     except ImportError as e:
-        print(f"  [OpenVINO] Not available ({e}); using standard PyTorch runtime.")
+        print(f"  [OpenVINO] Not available ({e}); using PyTorch runtime.")
         return None
+
+    ov_cfg = {"PERFORMANCE_HINT": "LATENCY", "INFERENCE_PRECISION_HINT": "f32"}
+    xml_path = os.path.join(ov_dir, "openvino_model.xml")
+    if os.path.isfile(xml_path):
+        try:
+            agent = _wrap_unpadded_system_one(OVAgent(ov_dir, device=ov_dev, ov_config=ov_cfg))
+            if _verify_agent_finite(agent):
+                mode_tag = "int8" if os.path.exists(os.path.join(ov_dir, ".int8")) else "fp32"
+                agent._device_label = f"openvino:{ov_dev.lower()}:{mode_tag}"
+                print(f"  [OpenVINO] Loaded cached {name} ({agent._device_label})")
+                return agent
+        except Exception as e:
+            print(f"  [OpenVINO] Cached model failed ({e}); rebuilding ...")
+        shutil.rmtree(ov_dir, ignore_errors=True)
 
     spec = DEFAULT_MODELS.get(name)
     if not spec:
@@ -104,24 +163,45 @@ def _ensure_openvino_int8(name: str, cache_root: str) -> Optional[str]:
     t0 = time.perf_counter()
     try:
         ov_export(repo, fp32_dir, subfolder=sub, compress_to_fp16=False)
-        print(f"  [OpenVINO] Quantizing {name} weights to INT8 via NNCF (preserving FP32 activations) ...")
+        print(f"  [OpenVINO] Quantizing {name} weights to INT8 via NNCF ...")
         core = ov.Core()
         model = core.read_model(os.path.join(fp32_dir, "openvino_model.xml"))
-        model = nncf.compress_weights(
+        q_model = nncf.compress_weights(
             model,
             mode=nncf.CompressWeightsMode.INT8_ASYM,
             ignored_scope=nncf.IgnoredScope(patterns=[".*act_head.*", ".*scorer.*"]),
         )
         os.makedirs(ov_dir, exist_ok=True)
-        ov.save_model(model, xml_path, compress_to_fp16=False)
+        ov.save_model(q_model, xml_path, compress_to_fp16=False)
         shutil.copy(os.path.join(fp32_dir, "rl_agent_config.json"), ov_dir)
         tok_dst = os.path.join(ov_dir, "tokenizer")
         if not os.path.exists(tok_dst):
             shutil.copytree(os.path.join(fp32_dir, "tokenizer"), tok_dst)
-        shutil.rmtree(fp32_dir, ignore_errors=True)
-        elapsed = time.perf_counter() - t0
-        print(f"  [OpenVINO] Ready: {ov_dir} built in {elapsed:.1f}s")
-        return ov_dir
+
+        # Tier 1: Verify INT8 OpenVINO model with unpadded per-question execution
+        agent = _wrap_unpadded_system_one(OVAgent(ov_dir, device=ov_dev, ov_config=ov_cfg))
+        if _verify_agent_finite(agent):
+            open(os.path.join(ov_dir, ".int8"), "w").close()
+            shutil.rmtree(fp32_dir, ignore_errors=True)
+            agent._device_label = f"openvino:{ov_dev.lower()}:int8"
+            print(f"  [OpenVINO] Ready (INT8): {ov_dir} verified in {time.perf_counter() - t0:.1f}s")
+            return agent
+
+        # Tier 2: Verify unquantized FP32 OpenVINO model
+        print(f"  [OpenVINO] INT8 produced non-finite output; testing FP32 OpenVINO IR ...")
+        shutil.rmtree(ov_dir, ignore_errors=True)
+        shutil.move(fp32_dir, ov_dir)
+        agent_fp32 = _wrap_unpadded_system_one(OVAgent(ov_dir, device=ov_dev, ov_config=ov_cfg))
+        if _verify_agent_finite(agent_fp32):
+            agent_fp32._device_label = f"openvino:{ov_dev.lower()}:fp32"
+            print(f"  [OpenVINO] Ready (FP32): {ov_dir} verified in {time.perf_counter() - t0:.1f}s")
+            return agent_fp32
+
+        print(f"  [OpenVINO] FP32 OpenVINO also produced non-finite output; marking .skip_ov")
+        shutil.rmtree(ov_dir, ignore_errors=True)
+        os.makedirs(ov_dir, exist_ok=True)
+        open(skip_marker, "w").close()
+        return None
     except Exception as e:
         print(f"  [OpenVINO] Export/quantize failed ({e}); falling back to PyTorch.")
         shutil.rmtree(fp32_dir, ignore_errors=True)
@@ -130,7 +210,7 @@ def _ensure_openvino_int8(name: str, cache_root: str) -> Optional[str]:
 
 
 class Engine:
-    """Holds the laya router (with OpenVINO INT8 or PyTorch Dynamic INT8 acceleration) and measures each phase."""
+    """Holds the laya router (with OpenVINO or PyTorch acceleration) and measures each phase."""
 
     def __init__(self, device: Optional[str] = None, preload: bool = False,
                  preload_names: Optional[List[str]] = None):
@@ -151,46 +231,41 @@ class Engine:
 
     def _load_or_attach_ov(self, router, name: str):
         cache_root = os.environ.get("HF_HOME") or "/cache"
-        ov_dir = _ensure_openvino_int8(name, cache_root)
-        if ov_dir:
-            try:
-                from laya.ov import OVAgent
-                ov_dev = "CPU"
-                if self.device and self.device.upper().startswith("GPU"):
-                    ov_dev = self.device.upper()
-                agent = OVAgent(
-                    ov_dir,
-                    device=ov_dev,
-                    ov_config={"PERFORMANCE_HINT": "LATENCY", "INFERENCE_PRECISION_HINT": "f32"},
-                )
-                if _verify_agent_finite(agent):
-                    agent.device = f"openvino:{ov_dev.lower()}:int8"
-                    router.attach(name, agent)
-                    self.backend = "openvino-int8"
-                    print(f"  [OpenVINO] Self-test passed for {name} ({agent.device})")
-                    return agent
-                else:
-                    print(f"  [OpenVINO] Self-test detected NaN/Inf for {name}; switching to PyTorch Dynamic INT8.")
-                    shutil.rmtree(ov_dir, ignore_errors=True)
-            except Exception as e:
-                print(f"  [OpenVINO] Failed to load/verify OVAgent for {name}: {e}")
+        ov_dev = "CPU"
+        if self.device and self.device.upper().startswith("GPU"):
+            ov_dev = self.device.upper()
 
-        # Fallback: PyTorch with oneDNN Dynamic INT8 quantization on Linear layers
+        ov_agent = _try_build_ov_agent(name, cache_root, ov_dev)
+        if ov_agent is not None:
+            router.attach(name, ov_agent)
+            self.backend = getattr(ov_agent, "_device_label", "openvino")
+            return ov_agent
+
+        # Tier 3: PyTorch with unpadded execution + optional Dynamic INT8
+        import copy
         import torch
         try:
             torch.set_num_threads(min(4, os.cpu_count() or 4))
         except Exception:
             pass
-        agent = router.load(name)
+        agent = _wrap_unpadded_system_one(router.load(name))
+        agent._device_label = f"pytorch:{agent.device}"
         if str(agent.device).startswith("cpu"):
             try:
-                print(f"  [PyTorch] Applying Dynamic INT8 quantization (oneDNN) to {name} ...")
+                print(f"  [PyTorch] Testing Dynamic INT8 quantization (oneDNN) for {name} ...")
+                orig_model = copy.deepcopy(agent.model)
                 agent.model = torch.ao.quantization.quantize_dynamic(
                     agent.model, {torch.nn.Linear}, dtype=torch.qint8
                 )
-                agent.device = "pytorch:cpu:int8"
-                self.backend = "pytorch-int8"
-                print(f"  [PyTorch] Ready: {name} running on {agent.device}")
+                if _verify_agent_finite(agent):
+                    # IMPORTANT: Do NOT overwrite `agent.device` (must stay a torch.device object!)
+                    agent._device_label = "pytorch:cpu:int8"
+                    self.backend = "pytorch-int8"
+                    del orig_model
+                    print(f"  [PyTorch] Ready: {name} verified on {agent._device_label}")
+                else:
+                    print(f"  [PyTorch] Dynamic INT8 produced non-finite output; restoring FP32 model.")
+                    agent.model = orig_model
             except Exception as e:
                 print(f"  [PyTorch] Dynamic INT8 skipped ({e}); using FP32.")
         return agent
@@ -230,7 +305,7 @@ class Engine:
             for name in self.router.loaded:
                 agent = self.router._agents.get(name)
                 if agent is not None:
-                    out["device_actual"] = str(agent.device)
+                    out["device_actual"] = getattr(agent, "_device_label", str(agent.device))
                     break
         return out
 
@@ -295,7 +370,7 @@ class Engine:
             "infer_ms": round(t_infer, 3),
             "total_ms": round(t_route + t_load + t_infer, 3),
         }
-        result["device"] = str(agent.device)
+        result["device"] = getattr(agent, "_device_label", str(agent.device))
         return result
 
 
