@@ -120,31 +120,37 @@ Once `wind_safety` is saved and running on the Shelly:
 | Raw Wind Input | `binary_sensor.outdoor_shelly_markiser_awning_somfy_wind_sensor` | Shelly Add-on Digital In (`input:100`) — *can be disabled in HA to prevent high-wind DB spam* |
 
 ### Package: `packages/awning_controller.yaml`
-The package provides:
+The package currently provides:
 - **Template Entities**: Automatically converts `event.awning_wind_safety` attributes (`locked` and `pulses`) into `binary_sensor.awning_wind_lockout` and `sensor.awning_wind_pulses`.
-- **`input_boolean.awning_automation_enabled`**: Master enable/disable toggle for comfort automations.
-- **`input_boolean.awning_manual_override`**: Engaged if the user manually retracts the awning on a sunny day. Resets at midnight or when manually reopened.
-- **`input_number.awning_sun_threshold_extend`** (default 65%): Sunlight level required to auto-extend.
-- **`input_number.awning_sun_threshold_retract`** (default 35%): Sunlight level below which awning auto-retracts.
-- **`input_datetime.awning_active_start`** (default 08:30) & **`input_datetime.awning_active_end`** (default 18:00): Allowed daytime operating window.
+- **Sunset Auto-Retract**: Retracts (`cover.open_cover`) the awning 30 minutes after sunset if it is extended (`closed`).
 
 ---
 
-## 5. Commissioning & Verification Checklist
+## 5. Implementation Roadmap & To-Do List
 
-- [ ] **Wall Switch Verification**:
-  - Press Up: Motor retracts until limit switch.
-  - Press Down: Motor extends until limit switch.
-- [ ] **Shelly Web UI Cover Test**:
-  - Test Open and Close buttons in the Shelly UI. Confirm 22s `maxtime_open` and `maxtime_close` allow full 20s travel before relay shuts off.
-- [ ] **Anemometer Spin Test**:
-  - While awning is extended, spin the Somfy Soliris anemometer wheel by hand.
-  - Observe `sensor.awning_wind_pulses` updating in Home Assistant.
-  - Spin briskly to reach $\ge 10$ pulses in a 2-second window.
-  - **Verify immediate retraction**: Shelly issues `Cover.Open` (Up/Retract) and `binary_sensor.awning_wind_lockout` switches to `on` in Home Assistant.
-- [ ] **Sliding Lockout Test**:
-  - Spin the anemometer again at minute 5: verify script logs indicate sliding lockout timer refresh.
-  - Allow 15 uninterrupted minutes of calm: verify lockout clears and switches to `off`.
-- [ ] **Sunlight Threshold Tuning**:
-  - Check `sensor.awning_sun_sensor` during midday sun and cloudy conditions.
-  - Adjust `input_number.awning_sun_threshold_extend` and `input_number.awning_sun_threshold_retract` on the Home Assistant dashboard to fit your local orientation.
+### Phase 1: Hardware & Sensor Verification
+- [ ] **Fix 3-wire sensor wiring:** Identify Common, Sun, and Wind wires on the Somfy cable and connect them correctly to the Shelly Add-on (`GND`, `Analog In + Vref/R1`, `Digital In`).
+- [ ] **Verify Add-on Digital In settings:** Ensure `input:100` in the Shelly UI is set to detached/no actions so reed pulses do not click the relays.
+- [ ] **Confirm clean sensor readings:**
+  - Sun sensor varies smoothly with ambient light (low at night, high in midday sun) instead of jumping between 66.8% and 17.7%.
+  - Wind sensor registers pulses only on `input:100` / `sensor.awning_wind_pulses`.
+
+### Phase 2: Threshold Calibration
+- [ ] **Calibrate wind threshold:** Spin test and observe pulse counts during real breeze to determine the pulse threshold $X$ for safety retraction (e.g., 10 pulses / 2s).
+- [ ] **Calibrate sun thresholds:** Note the percentage readings on overcast days vs. full direct sun to determine realistic extend (e.g., 65%) and retract (e.g., 35%) thresholds.
+
+### Phase 3: Wind Safety & Local Script (Offline Protection)
+- [ ] **Re-enable local retraction in `shelly-wind-safety.js`:** Restore `Cover.Open` (Up/Retract) upon threshold breach so wind safety functions 100% offline without depending on Wi-Fi or HA.
+- [ ] **High wind sliding lockout:** Verify the 15-minute calm window resets on recurring gusts and signals `binary_sensor.awning_wind_lockout`.
+
+### Phase 4: Comfort Automations & Override Logic
+- [x] **Sunset auto-retract:** Retract 30m after sunset if extended *(implemented in `awning_controller.yaml`)*.
+- [ ] **Auto-extend when sunny:** Deploy after sustained sun exposure ($\ge 10\text{ min}$) within active daytime operating hours.
+- [ ] **Low-light auto-retract:** Retract if sun drops below threshold for $\ge 20\text{ min}$ during the day.
+- [ ] **Manual override handling:** If manually rolled up via wall switch on a sunny day, prevent auto-extending until midnight or manual reopening.
+- [ ] **Master automation toggle:** An `input_boolean.awning_automation_enabled` helper on the dashboard to pause sun automations while keeping wind safety active.
+
+### Phase 5: Dashboard & Monitoring
+- [ ] **Dashboard card:** A Lovelace card displaying awning position, sun %, wind pulses, lockout state, and threshold sliders.
+- [ ] **Watchdog notification:** Alert via Home Assistant if the Shelly goes offline or the sensor becomes unavailable.
+
