@@ -30,7 +30,6 @@ volumes/
 !/services/home-assistant/config/packages/
 !/services/home-assistant/config/sensors/
 !/services/home-assistant/config/templates/
-!/services/home-assistant/config/zha_quirks/
 /services/home-assistant/matter-server/
 /services/home-assistant/music-assistant-server/
 /services/immich/database/
