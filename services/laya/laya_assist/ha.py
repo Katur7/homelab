@@ -29,7 +29,7 @@ def _request(base_url: str, token: str, path: str, method: str = "GET",
     return json.loads(body) if body.strip() else None
 
 
-_UMLAUTS = {"ä": "ae", "ö": "oe", "ü": "ue", "ß": "ss", "å": "a", "æ", "ae",
+_UMLAUTS = {"ä": "ae", "ö": "oe", "ü": "ue", "ß": "ss", "å": "a", "æ": "ae",
             "ø": "o", "ð": "d", "þ": "th", "á": "a", "é": "e", "í": "i",
             "ó": "o", "ú": "u", "ý": "y"}
 

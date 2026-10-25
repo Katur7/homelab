@@ -316,7 +316,7 @@ def build_questions(entities: Optional[Dict[str, Dict[str, str]]] = None,
 
     low = _fold(text)
     # Only evaluate brightness/temperature score questions if the utterance could involve them
-    if not text or any(w in low for w in ("dim", "bright", "pct", "%", "half", "halft", "mork", "ljus", "dekk", "bjart", "birt")):
+    if not text or any(w in low for w in ("dim", "bright", "pct", "%", "half", "halft", "mork", "ljusstyrk", "dekk", "bjart", "birt")):
         questions["brightness"] = {
             "type": "score",
             "instructions": "What brightness level does `command` request, if it is about lights?",
