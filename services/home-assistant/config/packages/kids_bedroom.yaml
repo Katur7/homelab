@@ -134,3 +134,55 @@ automation:
           - fri
     actions:
       - action: script.kids_bedroom_morning_wakeup
+
+  # 2. Two-Way Sync between Shelly Input Switch and Kids Bedroom Lights
+  - id: shelly_kids_input_light_sync
+    alias: "Kids Bedroom: Sync Shelly Input Switch and Lights"
+    description: "Keeps switch.shelly_1_kids_input and light.kids_bedroom_lights in two-way sync."
+    mode: single
+    max_exceeded: silent
+    triggers:
+      - trigger: state
+        entity_id: switch.shelly_1_kids_input
+        from:
+          - "on"
+          - "off"
+        to:
+          - "on"
+          - "off"
+        id: input_changed
+      - trigger: state
+        entity_id: light.kids_bedroom_lights
+        from:
+          - "on"
+          - "off"
+        to:
+          - "on"
+          - "off"
+        id: lights_changed
+    actions:
+      - choose:
+          # When Shelly Input switch is toggled in HA
+          - conditions:
+              - condition: trigger
+                id: input_changed
+            sequence:
+              # Brief delay so physical switch direct-binding updates the light first if flipped on wall
+              - delay:
+                  milliseconds: 250
+              - condition: template
+                value_template: "{{ states('light.kids_bedroom_lights') != trigger.to_state.state }}"
+              - action: "light.turn_{{ trigger.to_state.state }}"
+                target:
+                  entity_id: light.kids_bedroom_lights
+
+          # When Kids Bedroom Lights are turned on/off from HA UI or automations
+          - conditions:
+              - condition: trigger
+                id: lights_changed
+              - condition: template
+                value_template: "{{ states('switch.shelly_1_kids_input') != trigger.to_state.state }}"
+            sequence:
+              - action: "switch.turn_{{ trigger.to_state.state }}"
+                target:
+                  entity_id: switch.shelly_1_kids_input
