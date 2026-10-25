@@ -87,6 +87,8 @@ volumes/
 # Beszel agent — runtime data
 /services/beszel-agent/beszel_agent_data/
 
-# IDE files
+# IDE & language cache files
 .vscode/
 .idea/
+__pycache__/
+*.py[cod]
