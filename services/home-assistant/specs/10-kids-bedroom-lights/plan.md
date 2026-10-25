@@ -41,10 +41,10 @@ flowchart TD
    - Primary: A native **ZHA Zigbee Group** (`light.kids_bedroom_lights`) combining `light.ikea_kids1`, `light.ikea_kids2`, and `light.ikea_kids3`. This uses Zigbee multicast so all three bulbs turn on, turn off, and dim in unison without popcorn effect.
    - Backup/Definition: An HA `light` group entity (`light.kids_bedroom_bulbs`) is defined in the package as a software fallback.
 
-2. **Shelly Detached Mode & Continuous Power**:
-   - The Shelly relay (`switch.shelly_1_kids`) must stay closed/ON permanently to supply continuous AC mains power to the IKEA bulbs so they remain active Zigbee mesh routers/endpoints.
-   - A fail-safe automation (`automation.shelly_kids_keep_relay_powered`) guarantees that if the relay is ever turned off (accidentally or after power restoration), HA immediately restores power.
-   - When the physical rocker switch (SW) is flipped, the Shelly reports the input change without cutting relay power. HA listens to the input event and toggles `light.kids_bedroom_lights`.
+2. **Shelly Detached Mode & Zigbee Direct Binding**:
+   - The Shelly 1 is configured in **Detached Mode** so the relay stays closed/ON permanently, supplying continuous AC mains power to the IKEA bulbs.
+   - The Shelly is **direct-bound via Zigbee** to the ZHA Light Group (`light.kids_bedroom_lights`), allowing the physical wall switch to turn the bulbs on and off directly over the Zigbee mesh even if Home Assistant is offline.
+   - Because IKEA Trådfri bulbs do not report state changes to the coordinator when commanded via group multicast, `automation.shelly_kids_sync_bulb_state` listens for `switch.shelly_1_kids` toggling and calls `homeassistant.update_entity` on the 3 bulbs after 1 second so the Home Assistant UI updates immediately.
 
 3. **Morning Wake-up Automation (07:00 – 07:15, Mon–Fri)**:
    - Triggers at 07:00 on weekdays (Mon–Fri) when `input_boolean.kids_bedroom_automations` is `on`.
@@ -100,6 +100,5 @@ Contains:
 - `light.kids_bedroom_bulbs` (HA light group fallback)
 - `script.kids_bedroom_morning_wakeup` (15-minute coordinated light & volume ramp)
 - `script.kids_bedroom_stop_morning_routine` (Stops music & fades lights if cancelled)
-- `automation.kids_bedroom_morning_wakeup` (07:00 weekday trigger)
-- `automation.shelly_kids_keep_relay_powered` (Fail-safe relay power enforcer)
-- `automation.shelly_kids_wall_switch_toggle` (Handles physical switch input toggles)
+- `automation.kids_bedroom_morning_wakeup_auto` (07:00 weekday trigger)
+- `automation.shelly_kids_sync_bulb_state` (Polls the 3 IKEA bulbs when `switch.shelly_1_kids` toggles to keep HA state in sync with Zigbee direct group binding)
