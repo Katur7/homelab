@@ -20,8 +20,8 @@ RUN pip install --index-url https://download.pytorch.org/whl/cpu torch
 RUN git clone --depth 1 https://github.com/dwyschka/laya-assist-proxy.git /app && \
     pip install -e /app
 
-# Ensure server binds to 0.0.0.0 inside container so Traefik can reach port 7788
-RUN find /app/laya_assist -name "*.py" -exec sed -i 's/"127.0.0.1"/"0.0.0.0"/g; s/127\.0\.0\.1/0.0.0.0/g' {} + || true
+# Overlay English WebUI, schema, and server modules
+COPY laya_assist/ /app/laya_assist/
 
 RUN mkdir -p /data /cache && chown -R 1000:1000 /app /data /cache
 
