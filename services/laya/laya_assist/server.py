@@ -42,9 +42,46 @@ def _safe_issubclass(a, b):
 builtins.issubclass = _safe_issubclass
 
 
+import math
+
+
+def _is_all_finite(obj: Any) -> bool:
+    if isinstance(obj, float):
+        return math.isfinite(obj)
+    if isinstance(obj, dict):
+        return all(_is_all_finite(v) for v in obj.values())
+    if isinstance(obj, (list, tuple)):
+        return all(_is_all_finite(v) for v in obj)
+    return True
+
+
+def _sanitize_floats(obj: Any) -> Any:
+    if isinstance(obj, float):
+        return obj if math.isfinite(obj) else 0.0
+    if isinstance(obj, dict):
+        return {k: _sanitize_floats(v) for k, v in obj.items()}
+    if isinstance(obj, list):
+        return [_sanitize_floats(v) for v in obj]
+    return obj
+
+
+def _verify_agent_finite(agent) -> bool:
+    """Run a multi-row test batch (including padding across choice & noul) to verify no NaN/Inf occurs."""
+    test_qs = hschema.build_questions(
+        hschema.DEFAULT_ENTITIES, hschema.DEFAULT_AREAS, "Kveiktu ljósin í svefnherberginu"
+    )
+    res = agent.system_one({"command": "Kveiktu ljósin í svefnherberginu"}, test_qs)
+    return _is_all_finite(res.get("answers", {}))
+
+
 def _ensure_openvino_int8(name: str, cache_root: str) -> Optional[str]:
-    """Export and INT8-quantize a Laya checkpoint to OpenVINO IR in `cache_root` if not already cached."""
-    ov_dir = os.path.join(cache_root, f"laya-ov-int8-{name}")
+    """Export (with FP32 activations/constants) and INT8-quantize weights in `cache_root`."""
+    # Remove legacy v1 cache that exported with compress_to_fp16=True (causes FP16 overflow/NaN on mmBERT)
+    legacy_dir = os.path.join(cache_root, f"laya-ov-int8-{name}")
+    if os.path.exists(legacy_dir):
+        shutil.rmtree(legacy_dir, ignore_errors=True)
+
+    ov_dir = os.path.join(cache_root, f"laya-ov-int8-fp32act-{name}")
     xml_path = os.path.join(ov_dir, "openvino_model.xml")
     if os.path.isfile(xml_path):
         return ov_dir
@@ -62,34 +99,38 @@ def _ensure_openvino_int8(name: str, cache_root: str) -> Optional[str]:
     if not spec:
         return None
     repo, sub = _split(spec)
-    fp16_dir = os.path.join(cache_root, f"laya-ov-fp16-{name}")
-    print(f"  [OpenVINO] Exporting {name} ({repo}, subfolder={sub}) to OpenVINO IR (one-time setup) ...")
+    fp32_dir = os.path.join(cache_root, f"laya-ov-fp32-{name}")
+    print(f"  [OpenVINO] Exporting {name} ({repo}, subfolder={sub}) to OpenVINO FP32 IR ...")
     t0 = time.perf_counter()
     try:
-        ov_export(repo, fp16_dir, subfolder=sub, compress_to_fp16=True)
-        print(f"  [OpenVINO] Quantizing {name} to INT8 via NNCF ...")
+        ov_export(repo, fp32_dir, subfolder=sub, compress_to_fp16=False)
+        print(f"  [OpenVINO] Quantizing {name} weights to INT8 via NNCF (preserving FP32 activations) ...")
         core = ov.Core()
-        model = core.read_model(os.path.join(fp16_dir, "openvino_model.xml"))
-        model = nncf.compress_weights(model, mode=nncf.CompressWeightsMode.INT8_ASYM)
+        model = core.read_model(os.path.join(fp32_dir, "openvino_model.xml"))
+        model = nncf.compress_weights(
+            model,
+            mode=nncf.CompressWeightsMode.INT8_ASYM,
+            ignored_scope=nncf.IgnoredScope(patterns=[".*act_head.*", ".*scorer.*"]),
+        )
         os.makedirs(ov_dir, exist_ok=True)
-        ov.save_model(model, xml_path)
-        shutil.copy(os.path.join(fp16_dir, "rl_agent_config.json"), ov_dir)
+        ov.save_model(model, xml_path, compress_to_fp16=False)
+        shutil.copy(os.path.join(fp32_dir, "rl_agent_config.json"), ov_dir)
         tok_dst = os.path.join(ov_dir, "tokenizer")
         if not os.path.exists(tok_dst):
-            shutil.copytree(os.path.join(fp16_dir, "tokenizer"), tok_dst)
-        shutil.rmtree(fp16_dir, ignore_errors=True)
+            shutil.copytree(os.path.join(fp32_dir, "tokenizer"), tok_dst)
+        shutil.rmtree(fp32_dir, ignore_errors=True)
         elapsed = time.perf_counter() - t0
         print(f"  [OpenVINO] Ready: {ov_dir} built in {elapsed:.1f}s")
         return ov_dir
     except Exception as e:
         print(f"  [OpenVINO] Export/quantize failed ({e}); falling back to PyTorch.")
-        shutil.rmtree(fp16_dir, ignore_errors=True)
+        shutil.rmtree(fp32_dir, ignore_errors=True)
         shutil.rmtree(ov_dir, ignore_errors=True)
         return None
 
 
 class Engine:
-    """Holds the laya router (with OpenVINO INT8 acceleration) and measures each phase."""
+    """Holds the laya router (with OpenVINO INT8 or PyTorch Dynamic INT8 acceleration) and measures each phase."""
 
     def __init__(self, device: Optional[str] = None, preload: bool = False,
                  preload_names: Optional[List[str]] = None):
@@ -117,14 +158,42 @@ class Engine:
                 ov_dev = "CPU"
                 if self.device and self.device.upper().startswith("GPU"):
                     ov_dev = self.device.upper()
-                agent = OVAgent(ov_dir, device=ov_dev)
-                agent.device = f"openvino:{ov_dev.lower()}:int8"
-                router.attach(name, agent)
-                self.backend = "openvino-int8"
-                return agent
+                agent = OVAgent(
+                    ov_dir,
+                    device=ov_dev,
+                    ov_config={"PERFORMANCE_HINT": "LATENCY", "INFERENCE_PRECISION_HINT": "f32"},
+                )
+                if _verify_agent_finite(agent):
+                    agent.device = f"openvino:{ov_dev.lower()}:int8"
+                    router.attach(name, agent)
+                    self.backend = "openvino-int8"
+                    print(f"  [OpenVINO] Self-test passed for {name} ({agent.device})")
+                    return agent
+                else:
+                    print(f"  [OpenVINO] Self-test detected NaN/Inf for {name}; switching to PyTorch Dynamic INT8.")
+                    shutil.rmtree(ov_dir, ignore_errors=True)
             except Exception as e:
-                print(f"  [OpenVINO] Failed to load OVAgent for {name}: {e}")
-        return router.load(name)
+                print(f"  [OpenVINO] Failed to load/verify OVAgent for {name}: {e}")
+
+        # Fallback: PyTorch with oneDNN Dynamic INT8 quantization on Linear layers
+        import torch
+        try:
+            torch.set_num_threads(min(4, os.cpu_count() or 4))
+        except Exception:
+            pass
+        agent = router.load(name)
+        if str(agent.device).startswith("cpu"):
+            try:
+                print(f"  [PyTorch] Applying Dynamic INT8 quantization (oneDNN) to {name} ...")
+                agent.model = torch.ao.quantization.quantize_dynamic(
+                    agent.model, {torch.nn.Linear}, dtype=torch.qint8
+                )
+                agent.device = "pytorch:cpu:int8"
+                self.backend = "pytorch-int8"
+                print(f"  [PyTorch] Ready: {name} running on {agent.device}")
+            except Exception as e:
+                print(f"  [PyTorch] Dynamic INT8 skipped ({e}); using FP32.")
+        return agent
 
     def ensure(self, preload_all: bool = False):
         with self.lock:
@@ -484,8 +553,13 @@ def api_context_set(body: dict) -> dict:
 
 
 def api_fallback_models(_: dict) -> dict:
-    return {"models": fallback.list_models(STATE["fb_url"],
-                                          api_key=STATE["fb_api_key"])}
+    try:
+        return {"models": fallback.list_models(STATE["fb_url"],
+                                               api_key=STATE["fb_api_key"])}
+    except RuntimeError as e:
+        if not STATE["fb_enabled"] and "localhost:11434" in (STATE["fb_url"] or ""):
+            return {"models": []}
+        raise e
 
 
 def api_trace(_: dict) -> dict:
@@ -697,7 +771,8 @@ class Handler(BaseHTTPRequestHandler):
         self.wfile.write(payload)
 
     def _json(self, code: int, obj: Any):
-        self._send(code, json.dumps(obj, ensure_ascii=False).encode(),
+        clean_obj = _sanitize_floats(obj)
+        self._send(code, json.dumps(clean_obj, ensure_ascii=False, allow_nan=False).encode(),
                    "application/json; charset=utf-8")
 
     def _static(self, path: str):
