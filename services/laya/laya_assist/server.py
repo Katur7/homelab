@@ -1,11 +1,14 @@
-"""HTTP server: WebUI, JSON API, and OpenAI-compatible endpoint for Home Assistant."""
+"""HTTP server: WebUI, JSON API, OpenVINO INT8 acceleration, and OpenAI-compatible endpoint for Home Assistant."""
 import argparse
+import builtins
 import json
 import os
+import shutil
 import statistics
 import sys
 import threading
 import time
+import typing
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from typing import Any, Dict, List, Optional
 from urllib.parse import urlparse
@@ -19,9 +22,74 @@ from . import settings
 STATIC_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "static")
 CONFIG_PATH = os.path.join(settings.project_root(), "config.json")
 
+# NNCF compatibility shim for numpy >= 2.3 TypeAliasType
+_real_issubclass = builtins.issubclass
+
+
+def _safe_issubclass(a, b):
+    try:
+        return _real_issubclass(a, b)
+    except TypeError:
+        origin = typing.get_origin(getattr(b, "__value__", b))
+        if origin is None:
+            return False
+        try:
+            return _real_issubclass(a, origin)
+        except TypeError:
+            return False
+
+
+builtins.issubclass = _safe_issubclass
+
+
+def _ensure_openvino_int8(name: str, cache_root: str) -> Optional[str]:
+    """Export and INT8-quantize a Laya checkpoint to OpenVINO IR in `cache_root` if not already cached."""
+    ov_dir = os.path.join(cache_root, f"laya-ov-int8-{name}")
+    xml_path = os.path.join(ov_dir, "openvino_model.xml")
+    if os.path.isfile(xml_path):
+        return ov_dir
+
+    try:
+        import nncf
+        import openvino as ov
+        from laya.ov import export as ov_export
+        from laya.router import DEFAULT_MODELS, _split
+    except ImportError as e:
+        print(f"  [OpenVINO] Not available ({e}); using standard PyTorch runtime.")
+        return None
+
+    spec = DEFAULT_MODELS.get(name)
+    if not spec:
+        return None
+    repo, sub = _split(spec)
+    fp16_dir = os.path.join(cache_root, f"laya-ov-fp16-{name}")
+    print(f"  [OpenVINO] Exporting {name} ({repo}, subfolder={sub}) to OpenVINO IR (one-time setup) ...")
+    t0 = time.perf_counter()
+    try:
+        ov_export(repo, fp16_dir, subfolder=sub, compress_to_fp16=True)
+        print(f"  [OpenVINO] Quantizing {name} to INT8 via NNCF ...")
+        core = ov.Core()
+        model = core.read_model(os.path.join(fp16_dir, "openvino_model.xml"))
+        model = nncf.compress_weights(model, mode=nncf.CompressWeightsMode.INT8_ASYM)
+        os.makedirs(ov_dir, exist_ok=True)
+        ov.save_model(model, xml_path)
+        shutil.copy(os.path.join(fp16_dir, "rl_agent_config.json"), ov_dir)
+        tok_dst = os.path.join(ov_dir, "tokenizer")
+        if not os.path.exists(tok_dst):
+            shutil.copytree(os.path.join(fp16_dir, "tokenizer"), tok_dst)
+        shutil.rmtree(fp16_dir, ignore_errors=True)
+        elapsed = time.perf_counter() - t0
+        print(f"  [OpenVINO] Ready: {ov_dir} built in {elapsed:.1f}s")
+        return ov_dir
+    except Exception as e:
+        print(f"  [OpenVINO] Export/quantize failed ({e}); falling back to PyTorch.")
+        shutil.rmtree(fp16_dir, ignore_errors=True)
+        shutil.rmtree(ov_dir, ignore_errors=True)
+        return None
+
 
 class Engine:
-    """Holds the laya router and measures each phase individually."""
+    """Holds the laya router (with OpenVINO INT8 acceleration) and measures each phase."""
 
     def __init__(self, device: Optional[str] = None, preload: bool = False,
                  preload_names: Optional[List[str]] = None):
@@ -36,8 +104,27 @@ class Engine:
         self.error = None
         self.laya_version = None
         self.torch_version = None
+        self.backend = "pytorch"
         if preload:
             self.ensure(preload_all=True)
+
+    def _load_or_attach_ov(self, router, name: str):
+        cache_root = os.environ.get("HF_HOME") or "/cache"
+        ov_dir = _ensure_openvino_int8(name, cache_root)
+        if ov_dir:
+            try:
+                from laya.ov import OVAgent
+                ov_dev = "CPU"
+                if self.device and self.device.upper().startswith("GPU"):
+                    ov_dev = self.device.upper()
+                agent = OVAgent(ov_dir, device=ov_dev)
+                agent.device = f"openvino:{ov_dev.lower()}:int8"
+                router.attach(name, agent)
+                self.backend = "openvino-int8"
+                return agent
+            except Exception as e:
+                print(f"  [OpenVINO] Failed to load OVAgent for {name}: {e}")
+        return router.load(name)
 
     def ensure(self, preload_all: bool = False):
         with self.lock:
@@ -48,11 +135,12 @@ class Engine:
             import torch
             import laya
             from laya import Router
-            self.laya_version = laya.__version__
+            self.laya_version = getattr(laya, "__version__", "0.3.7")
             self.torch_version = torch.__version__
             self.router = Router(device=self.device)
             if preload_all:
-                self.router.preload(self.preload_names)
+                for name in self.preload_names:
+                    self._load_or_attach_ov(self.router, name)
             self.load_ms = (time.perf_counter() - t0) * 1000.0
             self.loading = False
             return self.router
@@ -111,7 +199,10 @@ class Engine:
                             reason="%s (instead of %r -- not loaded)"
                                    % (decision.get("reason", ""), wanted))
         with self.load_lock:
-            agent = router.load(decision["model"])
+            if decision["model"] in router.loaded:
+                agent = router.load(decision["model"])
+            else:
+                agent = self._load_or_attach_ov(router, decision["model"])
         t_load = (time.perf_counter() - t1) * 1000.0
 
         with self.infer_lock:
@@ -173,8 +264,11 @@ def load_config():
     if token:
         STATE["ha_token"] = token
     STATE["fb_api_key"] = settings.load_fb_api_key()
-    # Replace legacy German default catalog if never synced with HA
-    if not STATE["entities"] or "licht_wohnzimmer" in STATE["entities"]:
+    # Replace legacy German or old English-only default catalog if HA has not been synced
+    if (not STATE["entities"]
+            or "licht_wohnzimmer" in STATE["entities"]
+            or ("light_bedroom" in STATE["entities"]
+                and "svefnherbergi" not in STATE["entities"]["light_bedroom"].get("desc", ""))):
         STATE["entities"] = dict(hschema.DEFAULT_ENTITIES)
         STATE["areas"] = dict(hschema.DEFAULT_AREAS)
     print("  project.yaml: %d entities, model %s, fallback %s, token %s"
@@ -182,8 +276,8 @@ def load_config():
              STATE["fb_model"] or "off", "saved" if token else "not saved"))
 
 
-def _questions() -> Dict[str, Any]:
-    return hschema.build_questions(STATE["entities"], STATE["areas"])
+def _questions(text: str = "") -> Dict[str, Any]:
+    return hschema.build_questions(STATE["entities"], STATE["areas"], text=text)
 
 
 def api_health(_: dict) -> dict:
@@ -231,7 +325,7 @@ def api_predict(body: dict) -> dict:
     threshold = float(body.get("threshold", 0.6))
 
     custom = body.get("questions")
-    questions = custom if isinstance(custom, dict) and custom else _questions()
+    questions = custom if isinstance(custom, dict) and custom else _questions(text=text)
 
     ctx = body.get("context") if isinstance(body.get("context"), dict) else None
     res = ENGINE.predict(text, questions, model=model, context=ctx,
@@ -259,11 +353,11 @@ def api_bench(body: dict) -> dict:
     model = body.get("model") or STATE["default_model"] or None
     if model == "router":
         model = None
-    questions = _questions()
     ENGINE.ensure()
 
     for i in range(warmup):
-        ENGINE.predict(texts[i % len(texts)], questions, model=model)
+        t_str = texts[i % len(texts)]
+        ENGINE.predict(t_str, _questions(t_str), model=model)
 
     samples: List[float] = []
     infer: List[float] = []
@@ -271,8 +365,12 @@ def api_bench(body: dict) -> dict:
     tokens: List[int] = []
     per_model: Dict[str, int] = {}
     t_start = time.perf_counter()
+    last_q_len = 4
     for i in range(runs):
-        r = ENGINE.predict(texts[i % len(texts)], questions, model=model)
+        t_str = texts[i % len(texts)]
+        qs = _questions(t_str)
+        last_q_len = len(qs)
+        r = ENGINE.predict(t_str, qs, model=model)
         samples.append(r["timing"]["total_ms"])
         infer.append(r["timing"]["infer_ms"])
         route.append(r["timing"]["route_ms"])
@@ -287,10 +385,10 @@ def api_bench(body: dict) -> dict:
         return round(s[idx], 2)
 
     return {
-        "runs": runs, "warmup": warmup, "questions": len(questions),
+        "runs": runs, "warmup": warmup, "questions": last_q_len,
         "wall_s": round(wall, 3),
         "qps": round(runs / wall, 2) if wall > 0 else None,
-        "decisions_per_s": round(runs * len(questions) / wall, 1) if wall > 0 else None,
+        "decisions_per_s": round(runs * last_q_len / wall, 1) if wall > 0 else None,
         "total": {"min": round(min(samples), 2), "mean": round(statistics.fmean(samples), 2),
                   "p50": pct(samples, .5), "p95": pct(samples, .95),
                   "p99": pct(samples, .99), "max": round(max(samples), 2),
@@ -408,13 +506,29 @@ def api_models(_: dict) -> dict:
     return {"object": "list", "data": models}
 
 
+ACK_BY_LANG = {
+    "is": "Búið.",
+    "sv": "Klart.",
+    "en": "Done.",
+}
+
+ERR_BY_LANG = {
+    "is": "Ég skildi þetta ekki nógu vel.",
+    "sv": "Jag förstod inte riktigt det.",
+    "en": "I didn't understand that with enough confidence.",
+}
+
+
 def api_chat(body: dict) -> dict:
-    """OpenAI-compatible endpoint: laya first, otherwise fallback LLM."""
+    """OpenAI-compatible endpoint: laya first (direct HA execution or OpenAI tool call), else fallback LLM."""
     messages = body.get("messages") or []
     if not messages:
         raise ValueError("'messages' is missing")
     stream = bool(body.get("stream"))
     model_label = body.get("model") or "laya"
+
+    user_text_for_lang = oai.last_user_message(messages)
+    lang = hschema.detect_language(user_text_for_lang)
 
     if oai.ends_with_tool_result(messages):
         if oai.result_needs_words(messages) and STATE["fb_enabled"] and STATE["fb_model"]:
@@ -437,13 +551,13 @@ def api_chat(body: dict) -> dict:
             except RuntimeError as e:
                 _note({"t": time.time(), "text": "(Tool Result)", "route": "ack",
                        "reason": "Fallback unreachable (%s) -- static ack" % e})
-        payload = oai.completion(model_label, content="Done.")
+        payload = oai.completion(model_label, content=ACK_BY_LANG.get(lang, "Done."))
         _note({"t": time.time(), "text": "(Tool Result)", "route": "ack",
                "reason": "Client reported tool execution complete",
                "tool": ", ".join(oai.answered_tools(messages))})
         return {"__raw__": payload, "__stream__": stream}
 
-    text = oai.last_user_message(messages)
+    text = user_text_for_lang
     if not text:
         raise ValueError("no user utterance in 'messages'")
 
@@ -463,16 +577,49 @@ def api_chat(body: dict) -> dict:
     })
     prev = oai.history(messages, STATE["ctx_entries"])
     t0 = time.perf_counter()
-    res = ENGINE.predict(text, _questions(), model=STATE["default_model"],
+    res = ENGINE.predict(text, _questions(text=text), model=STATE["default_model"],
                          context={"previous": prev} if prev else None,
                          context_for=hschema.CONTEXT_QUESTIONS,
                          allow_load=False)
     call = hschema.build_toolcall(res["answers"], STATE["entities"],
                                   STATE["fb_threshold"], text, STATE["areas"])
-    tool_call, reason = oai.build_tool_call(
-        res["answers"], call, STATE["entities"], STATE["areas"], tools,
-        STATE["fb_threshold"], text)
     laya_ms = (time.perf_counter() - t0) * 1000.0
+
+    # Direct REST execution when HA is connected and Laya resolved a confident service_call
+    conf = call.get("confidence") or 0.0
+    if (call.get("kind") == "service_call"
+            and conf >= STATE["fb_threshold"]
+            and STATE["ha_url"] and STATE["ha_token"]
+            and call.get("domain") and call.get("service")):
+        try:
+            ha.call_service(STATE["ha_url"], STATE["ha_token"],
+                            call["domain"], call["service"],
+                            call.get("target") or {}, call.get("data") or {})
+            ack = ACK_BY_LANG.get(lang, "Done.")
+            target_str = json.dumps({**(call.get("target") or {}), **(call.get("data") or {})}, ensure_ascii=False)
+            service_label = "%s.%s" % (call["domain"], call["service"])
+            payload = oai.completion(
+                model_label, content=ack,
+                extra={"route": "laya-direct", "reason": "Direct HA REST service call",
+                       "ms": round(laya_ms, 1), "toolcall": call})
+            _note({"t": time.time(), "text": text, "route": "laya",
+                   "reason": "Direct HA REST call (%s)" % service_label,
+                   "ms": round(laya_ms, 1), "offered": sorted(tools), "kontext": prev,
+                   "tool": service_label, "args": target_str})
+            return {"__raw__": payload, "__stream__": stream}
+        except Exception as e:
+            _note({"t": time.time(), "text": text, "route": "error",
+                   "reason": "Direct HA service call failed: %s" % e,
+                   "ms": round(laya_ms, 1)})
+
+    # If it's a state query and fallback LLM is enabled, let fallback LLM answer naturally
+    if call.get("kind") == "query" and STATE["fb_enabled"] and STATE["fb_model"]:
+        reason = "State query escalated to Fallback LLM for natural language phrasing"
+        tool_call = None
+    else:
+        tool_call, reason = oai.build_tool_call(
+            res["answers"], call, STATE["entities"], STATE["areas"], tools,
+            STATE["fb_threshold"], text)
 
     if tool_call is not None:
         payload = oai.completion(model_label, content=None, tool_calls=[tool_call],
@@ -488,7 +635,7 @@ def api_chat(body: dict) -> dict:
     if not (STATE["fb_enabled"] and STATE["fb_model"]):
         payload = oai.completion(
             model_label,
-            content="I didn't understand that with enough confidence.",
+            content=ERR_BY_LANG.get(lang, ERR_BY_LANG["en"]),
             extra={"route": "none", "reason": reason, "ms": round(laya_ms, 1)})
         _note({"t": time.time(), "text": text, "route": "none", "reason": reason,
                "ms": round(laya_ms, 1), "offered": sorted(tools), "kontext": prev})

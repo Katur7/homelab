@@ -9,6 +9,7 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 RUN apt-get update && apt-get install -y --no-install-recommends \
     git \
     curl \
+    libgomp1 \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
@@ -16,11 +17,15 @@ WORKDIR /app
 # Install CPU-only PyTorch first to avoid pulling >3GB of NVIDIA CUDA packages
 RUN pip install --index-url https://download.pytorch.org/whl/cpu torch
 
-# Clone and install laya-assist-proxy (pulls convai's laya and PyYAML)
-RUN git clone --depth 1 https://github.com/dwyschka/laya-assist-proxy.git /app && \
-    pip install -e /app
+# Install OpenVINO + NNCF for INT8 quantization and rupeshs/laya-openvino runtime
+RUN pip install openvino nncf git+https://github.com/rupeshs/laya-openvino.git
 
-# Overlay English WebUI, schema, and server modules
+# Clone and install laya-assist-proxy without overwriting laya-openvino
+RUN git clone --depth 1 https://github.com/dwyschka/laya-assist-proxy.git /app && \
+    pip install PyYAML && \
+    pip install --no-deps -e /app
+
+# Overlay English + Trilingual (EN/SV/IS) + OpenVINO INT8 modules
 COPY laya_assist/ /app/laya_assist/
 
 RUN mkdir -p /data /cache && chown -R 1000:1000 /app /data /cache

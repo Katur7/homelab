@@ -5,6 +5,7 @@ import urllib.request
 from typing import Any, Dict, List, Optional, Tuple
 
 from . import ha_ws
+from . import schema
 
 SUPPORTED_DOMAINS = {"light", "switch", "climate", "cover", "media_player",
                      "lock", "vacuum", "fan", "scene", "script"}
@@ -28,7 +29,7 @@ def _request(base_url: str, token: str, path: str, method: str = "GET",
     return json.loads(body) if body.strip() else None
 
 
-_UMLAUTS = {"ä": "ae", "ö": "oe", "ü": "ue", "ß": "ss", "å": "a", "æ": "ae",
+_UMLAUTS = {"ä": "ae", "ö": "oe", "ü": "ue", "ß": "ss", "å": "a", "æ", "ae",
             "ø": "o", "ð": "d", "þ": "th", "á": "a", "é": "e", "í": "i",
             "ó": "o", "ú": "u", "ý": "y"}
 
@@ -36,8 +37,26 @@ _UMLAUTS = {"ä": "ae", "ö": "oe", "ü": "ue", "ß": "ss", "å": "a", "æ": "ae
 def _slug(text: str) -> str:
     out = []
     for ch in text.lower():
-        if ch in _UMLAUTS:
-            out.append(_UMLAUTS[ch])
+        if ch == "ä":
+            out.append("ae")
+        elif ch == "ö":
+            out.append("oe")
+        elif ch == "ü":
+            out.append("ue")
+        elif ch == "ß":
+            out.append("ss")
+        elif ch == "æ":
+            out.append("ae")
+        elif ch == "ø":
+            out.append("o")
+        elif ch == "å":
+            out.append("a")
+        elif ch == "ð":
+            out.append("d")
+        elif ch == "þ":
+            out.append("th")
+        elif ch in ("á", "é", "í", "ó", "ú", "ý"):
+            out.append({"á": "a", "é": "e", "í": "i", "ó": "o", "ú": "u", "ý": "y"}[ch])
         elif ch.isascii() and ch.isalnum():
             out.append(ch)
         elif ch in " -_/.":
@@ -45,37 +64,26 @@ def _slug(text: str) -> str:
     return "_".join(x for x in "".join(out).split("_") if x) or "entity"
 
 
-DOMAIN_WORDS = {
-    "light": "Light", "switch": "Switch", "climate": "Heating",
-    "cover": "Cover", "media_player": "Speaker", "lock": "Lock",
-    "vacuum": "Vacuum", "fan": "Fan", "scene": "Scene",
-    "script": "Script",
-}
-
-
 def _head(ent: Dict[str, Any], areas: Dict[str, str]) -> str:
-    """The distinguishing prefix: area and device type."""
-    word = DOMAIN_WORDS.get(ent.get("domain", ""), ent.get("domain", ""))
-    area = areas.get(ent.get("area") or "", "")
-    return ("%s %s" % (area, word)).strip()
+    """The distinguishing prefix: area (with its aliases) and trilingual device type."""
+    dom = ent.get("domain", "")
+    dom_words = schema.DOMAIN_SYNONYMS.get(dom, dom)
+    area_desc = areas.get(ent.get("area") or "", "")
+    return ("%s — %s" % (area_desc, dom_words)).strip(" —")
 
 
 def describe_all(entities: Dict[str, Dict[str, Any]], areas: Dict[str, str]):
-    """Sets `desc` -- the text description laya matches against."""
-    heads = {key: _head(ent, areas) for key, ent in entities.items()}
-    ambiguous = {h for h in heads.values()
-                 if list(heads.values()).count(h) > 1}
+    """Sets `desc` -- the trilingual description laya matches against."""
     for key, ent in entities.items():
-        head = heads[key]
+        head = _head(ent, areas)
         parts = [head] if head else []
-        for alias in ent.get("aliases") or []:
-            if alias.lower() not in (t.lower() for t in parts):
-                parts.append(alias)
         name = (ent.get("name") or "").strip()
-        has_alias = bool(ent.get("aliases"))
-        if name and (not parts or (head in ambiguous and not has_alias)):
-            parts.append(name)
-        ent["desc"] = ", ".join(parts) or name or ent["entity_id"]
+        if name and name.lower() not in head.lower():
+            parts.insert(0, name)
+        for alias in ent.get("aliases") or []:
+            if alias.lower() not in " ".join(parts).lower():
+                parts.append(alias)
+        ent["desc"] = " | ".join(parts) or name or ent["entity_id"]
 
 
 CATALOG_TEMPLATE = """
@@ -92,10 +100,26 @@ CATALOG_TEMPLATE = """
 """
 
 
+def _format_area_desc(area_name: str, area_id: str, area_aliases: Optional[Dict[str, List[str]]]) -> str:
+    """Combine HA area name, HA area aliases (Swedish/Icelandic), and built-in synonyms."""
+    parts = [area_name]
+    if area_aliases and area_id in area_aliases:
+        for al in area_aliases[area_id]:
+            if al.lower() not in [p.lower() for p in parts]:
+                parts.append(al)
+    builtin = schema.AREA_SYNONYMS.get(area_name.lower(), "")
+    if builtin:
+        for b in [x.strip() for x in builtin.split(",")]:
+            if b and b.lower() not in [p.lower() for p in parts]:
+                parts.append(b)
+    return ", ".join(parts)
+
+
 def fetch_catalog_via_template(base_url: str, token: str, limit: int = 200,
-                               allow: Optional[Dict[str, Dict[str, Any]]] = None
+                               allow: Optional[Dict[str, Dict[str, Any]]] = None,
+                               area_aliases: Optional[Dict[str, List[str]]] = None
                                ) -> Tuple[Dict[str, Dict[str, str]], Dict[str, str]]:
-    """Fetch catalog with real areas rendered by Home Assistant."""
+    """Fetch catalog with real areas and area aliases rendered by Home Assistant."""
     tpl = CATALOG_TEMPLATE.replace("__DOMAINS__", json.dumps(sorted(SUPPORTED_DOMAINS)))
     raw = _request(base_url, token, "/api/template", method="POST",
                    payload={"template": tpl}, timeout=20.0)
@@ -114,15 +138,16 @@ def fetch_catalog_via_template(base_url: str, token: str, limit: int = 200,
         if key in entities:
             key = _slug("%s %s" % (name, row["entity_id"].split(".", 1)[-1]))
         area_name = (row.get("area") or "").strip()
+        area_id = (row.get("area_id") or "").strip()
         area_key = _slug(area_name) if area_name else ""
         if area_key:
-            areas[area_key] = area_name
+            areas[area_key] = _format_area_desc(area_name, area_id, area_aliases)
         entities[key] = {
             "name": name,
             "entity_id": row["entity_id"],
             "domain": row["domain"],
             "area": area_key,
-            "area_id": (row.get("area_id") or "").strip(),
+            "area_id": area_id,
             "desc": "",
         }
         if aliases:
@@ -133,13 +158,14 @@ def fetch_catalog_via_template(base_url: str, token: str, limit: int = 200,
 
 def fetch_catalog(base_url: str, token: str, limit: int = 200
                   ) -> Tuple[Dict[str, Dict[str, str]], Dict[str, str], Dict[str, Any]]:
-    """Fetch catalog from Home Assistant, filtered by Assist exposure."""
+    """Fetch catalog from Home Assistant, filtered by Assist exposure and enriched with Area aliases."""
     info: Dict[str, Any] = {"assist_filter": False, "freigegeben": 0,
                             "mit_alias": 0, "nicht_ansprechbar": [],
                             "warnung": ""}
     allow: Optional[Dict[str, Dict[str, Any]]] = None
+    area_aliases: Optional[Dict[str, List[str]]] = None
     try:
-        allow = ha_ws.fetch_assist_entities(base_url, token)
+        allow, area_aliases = ha_ws.fetch_assist_entities(base_url, token)
         info["assist_filter"] = True
         info["freigegeben"] = len(allow)
     except Exception as e:
@@ -148,7 +174,7 @@ def fetch_catalog(base_url: str, token: str, limit: int = 200
 
     try:
         ents, areas = fetch_catalog_via_template(base_url, token, limit=limit,
-                                                 allow=allow)
+                                                 allow=allow, area_aliases=area_aliases)
         if ents or (allow is not None and not allow):
             info["mit_alias"] = sum(1 for e in ents.values() if e.get("aliases"))
             info["nicht_ansprechbar"] = verify_names(base_url, token, ents)
@@ -203,7 +229,6 @@ def fetch_catalog(base_url: str, token: str, limit: int = 200
 
 
 def _resolves(base_url: str, token: str, name: str, entity_id: str) -> bool:
-    """Does Home Assistant resolve `name` to this exact entity via HassGetState?"""
     try:
         res = _request(base_url, token, "/api/intent/handle", method="POST",
                        payload={"name": "HassGetState", "data": {"name": name}},
@@ -216,7 +241,6 @@ def _resolves(base_url: str, token: str, name: str, entity_id: str) -> bool:
 
 def verify_names(base_url: str, token: str,
                  entities: Dict[str, Dict[str, Any]]) -> List[str]:
-    """Records the name under which HA actually resolves each entity."""
     unreachable: List[str] = []
     for key, ent in entities.items():
         eid = ent["entity_id"]

@@ -15,18 +15,27 @@ To enable low-latency, private, local intent recognition for the Home Assistant 
 ## 🛠️ Architecture & Decisions
 
 ### 1. Container & Service Layout (`services/laya/`)
-- **Build Strategy:** Custom `Dockerfile` in `services/laya/Dockerfile` based on `python:3.12-slim` (pinned), installing CPU-only PyTorch (`--index-url https://download.pytorch.org/whl/cpu` to avoid 3GB+ CUDA bloat) and `dwyschka/laya-assist-proxy`.
+- **Build Strategy:** Custom `Dockerfile` in [`services/laya/Dockerfile`](file:///Users/grimur/personal-code/homelab/services/laya/Dockerfile) based on `python:3.12-slim` (pinned), installing CPU-only PyTorch (`--index-url https://download.pytorch.org/whl/cpu`), Intel OpenVINO + NNCF (`rupeshs/laya-openvino`), and `dwyschka/laya-assist-proxy` with our English & Trilingual overlay (`services/laya/laya_assist/`).
+- **OpenVINO INT8 Acceleration & Candidate Pruning:**
+  - Automatically exports `convaiinnovations/laya` (`subfolder="multilingual"`) to OpenVINO IR and compresses weights to `INT8_ASYM` via NNCF into `/cache/laya-ov-int8-multilingual` on first startup.
+  - Combines lexical/domain candidate pruning (capping to top 14 relevant entities per pass) and conditional question pruning (skipping `brightness`/`temperature`/`needs_confirmation` unless relevant numbers/keywords appear) to reduce CPU forward-pass latency on the Intel N150 from ~3.6s to sub-second.
+- **Trilingual (EN / SV / IS) Zero-Shot Support:**
+  - Enriches action descriptions, domain keywords, and synced Home Assistant entities/areas with English, Swedish, and Icelandic synonyms (`schema.py`, `ha_ws.py`, `ha.py`), plus pulls Home Assistant Area aliases via WebSocket (`config/area_registry/list`).
+  - Stem-aware Nordic room matching (`area_named`) and deterministic imperative verb rules (`Kveiktu`/`Slökktu`, `Tänd`/`Släck`, `Turn on`/`Turn off`) ensure inflection resilience across all three languages against an English-named Home Assistant catalog.
+- **Direct HA REST Execution & Fallback:**
+  - High-confidence commands execute directly against Home Assistant REST API (`ha.call_service` using `entity_id` / `area_id`) and return localized acknowledgments (`"Done."` / `"Klart."` / `"Búið."`).
+  - State queries and low-confidence/complex requests automatically escalate to the Fallback LLM (`https://generativelanguage.googleapis.com/v1beta/openai`).
 - **Network Topology:**
   - Connected exclusively to `traefik_internal` (no host `ports:` or `extra_hosts` needed).
   - Traefik routes `https://laya.internal.pippinn.me` to container port `7788` (accessible to both browser UI and Home Assistant at `https://laya.internal.pippinn.me/v1`).
   - Laya reaches Home Assistant via `https://home-assistant.pippinn.me` over REST/WebSockets to sync exposed entities, areas, and voice aliases.
 - **Hardware & Resource Limits:**
-  - `/dev/dri:/dev/dri` passed through for Intel N150 iGPU / OpenVINO acceleration testing.
+  - `/dev/dri:/dev/dri` passed through for Intel N150 iGPU / OpenVINO acceleration.
   - CPU limit: `4.0` cores (full burst across N150 cores during forward-pass inference).
-  - Memory limit: `4096M` (accommodates ~1.6GB multilingual model weights + runtime).
+  - Memory limit: `4096M` (accommodates ~1.6GB multilingual model weights + OpenVINO runtime).
 - **Volumes & Backup Hygiene:**
   - `./data:/data` (`LAYA_ASSIST_HOME=/data`): Stores `project.yaml` (entity catalog, thresholds, settings) and `secrets.local.json` (HA Long-Lived Access Token, Gemini API key). Gitignored, **included** in BorgBackup.
-  - `./cache:/cache` (`HF_HOME=/cache`): Stores downloaded Hugging Face model weights (~1.6GB). Gitignored, **excluded** from BorgBackup (`borg-exclude-homelab.txt`) as weights are regenerable.
+  - `./cache:/cache` (`HF_HOME=/cache`): Stores downloaded Hugging Face model weights and the compiled `/cache/laya-ov-int8-multilingual` OpenVINO INT8 model. Gitignored, **excluded** from BorgBackup (`borg-exclude-homelab.txt`) as weights are regenerable.
 
 ### 2. Traefik & DNS Configuration
 - **Internal Route:** `Host(\`laya.internal.pippinn.me\`)` on `websecure` entrypoint (protected by global `internal-only` LAN IP allowlist middleware, no Authelia).
