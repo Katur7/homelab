@@ -135,54 +135,28 @@ automation:
     actions:
       - action: script.kids_bedroom_morning_wakeup
 
-  # 2. Two-Way Sync between Shelly Input Switch and Kids Bedroom Lights
-  - id: shelly_kids_input_light_sync
-    alias: "Kids Bedroom: Sync Shelly Input Switch and Lights"
-    description: "Keeps switch.shelly_1_kids_input and light.kids_bedroom_lights in two-way sync."
+  # 2. Out-of-Sync Wall Switch Toggle
+  # Normally, Zigbee Direct Binding turns the lights ON when the rocker flips to ON,
+  # and OFF when the rocker flips to OFF (even if HA is offline).
+  # If the lights were changed from HA (putting the physical rocker out of sync with the lights),
+  # flipping the rocker sends a command matching the state the lights are ALREADY in.
+  # This automation detects that out-of-sync flip and toggles the lights immediately.
+  - id: shelly_kids_out_of_sync_toggle
+    alias: "Kids Bedroom: Wall Switch Out-of-Sync Toggle"
+    description: "Toggles the lights if the physical rocker switch was out of sync with the current light state."
     mode: single
     max_exceeded: silent
     triggers:
-      - trigger: state
-        entity_id: switch.shelly_1_kids_input
-        from:
-          - "on"
-          - "off"
-        to:
-          - "on"
-          - "off"
-        id: input_changed
-      - trigger: state
-        entity_id: light.kids_bedroom_lights
-        from:
-          - "on"
-          - "off"
-        to:
-          - "on"
-          - "off"
-        id: lights_changed
+      - trigger: event
+        event_type: zha_event
+    conditions:
+      - condition: template
+        value_template: >-
+          {{ trigger.event.data.device_id == device_id('switch.shelly_1_kids')
+             and (trigger.event.data.command | lower) in ['on', 'off']
+             and states('light.kids_bedroom_lights') == (trigger.event.data.command | lower)
+             and (now() - states.light.kids_bedroom_lights.last_changed).total_seconds() > 2 }}
     actions:
-      - choose:
-          # When Shelly Input switch is toggled in HA
-          - conditions:
-              - condition: trigger
-                id: input_changed
-            sequence:
-              # Brief delay so physical switch direct-binding updates the light first if flipped on wall
-              - delay:
-                  milliseconds: 250
-              - condition: template
-                value_template: "{{ states('light.kids_bedroom_lights') != trigger.to_state.state }}"
-              - action: "light.turn_{{ trigger.to_state.state }}"
-                target:
-                  entity_id: light.kids_bedroom_lights
-
-          # When Kids Bedroom Lights are turned on/off from HA UI or automations
-          - conditions:
-              - condition: trigger
-                id: lights_changed
-              - condition: template
-                value_template: "{{ states('switch.shelly_1_kids_input') != trigger.to_state.state }}"
-            sequence:
-              - action: "switch.turn_{{ trigger.to_state.state }}"
-                target:
-                  entity_id: switch.shelly_1_kids_input
+      - action: light.toggle
+        target:
+          entity_id: light.kids_bedroom_lights

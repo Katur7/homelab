@@ -1,23 +1,16 @@
-"""Custom ZHA Quirk for Shelly 1 Gen4 to expose the detached input as a controllable switch."""
+"""Custom ZHA Quirk for Shelly 1 Gen4 to expose the detached input as a standard binary sensor."""
 
 from typing import Any
 
-from zhaquirks import LocalDataCluster
+from zigpy.quirks import CustomCluster
 from zigpy.quirks.v2 import EntityType, QuirkBuilder
 from zigpy.types import Addressing
 from zigpy.zcl import ClusterType, foundation
 from zigpy.zcl.clusters.general import OnOff
 
 
-class ShellyInputOnOffClientCluster(LocalDataCluster, OnOff):
-    """Shelly detached input OnOff client cluster that supports local state and UI toggling."""
-
-    _DEFAULT_VALUES = {
-        OnOff.AttributeDefs.on_off.id: False,
-    }
-    _VALID_ATTRIBUTES = {
-        OnOff.AttributeDefs.on_off.id,
-    }
+class ShellyInputOnOffClientCluster(CustomCluster, OnOff):
+    """Shelly detached input OnOff client cluster that updates on_off state on command."""
 
     def handle_cluster_request(
         self,
@@ -55,7 +48,7 @@ quirk = (
         endpoint_id=2,
         cluster_type=ClusterType.Client,
     )
-    .switch(
+    .binary_sensor(
         OnOff.AttributeDefs.on_off.name,
         OnOff.cluster_id,
         endpoint_id=2,
