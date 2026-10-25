@@ -1,0 +1,40 @@
+name: laya
+
+services:
+  laya:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: laya-assist-proxy:0.1.0
+    container_name: laya
+    restart: unless-stopped
+    init: true
+    user: "${PUID:-1000}:${PGID:-1000}"
+    device_cgroup_rules:
+      - 'c 189:* rmw'
+    devices:
+      - /dev/dri:/dev/dri
+    networks:
+      - traefik_internal
+    env_file:
+      - ../../global.env
+      - vars.env
+    volumes:
+      - ./data:/data
+      - ./cache:/cache
+    labels:
+      - "traefik.enable=true"
+      - "traefik.docker.network=traefik_internal"
+      - "traefik.http.routers.laya-internal.entrypoints=websecure"
+      - "traefik.http.routers.laya-internal.rule=Host(`laya.internal.pippinn.me`)"
+      - "traefik.http.services.laya-internal.loadbalancer.server.port=7788"
+      - "wud.watch=false"
+    deploy:
+      resources:
+        limits:
+          cpus: "4.0"
+          memory: 4096M
+
+networks:
+  traefik_internal:
+    external: true
