@@ -1,0 +1,190 @@
+# Package: Kids Bedroom Lighting & Morning Wake-Up
+# Spec: services/home-assistant/specs/10-kids-bedroom-lights/plan.md
+
+# ---------------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------------
+
+input_boolean:
+  kids_bedroom_automations:
+    name: "Kids Bedroom Automations"
+    icon: mdi:bell-ring
+    initial: true
+
+# ---------------------------------------------------------------------------
+# Light Group Fallback
+# (Native ZHA Zigbee Group light.kids_bedroom_lights is preferred for multicast;
+# this group acts as an immediate fallback).
+# ---------------------------------------------------------------------------
+
+light:
+  - platform: group
+    name: "Kids Bedroom Bulbs"
+    unique_id: kids_bedroom_bulbs_group
+    entities:
+      - light.ikea_kids1
+      - light.ikea_kids2
+      - light.ikea_kids3
+
+# ---------------------------------------------------------------------------
+# Scripts
+# ---------------------------------------------------------------------------
+
+script:
+  kids_bedroom_morning_wakeup:
+    alias: "Kids Bedroom: Morning Wake-Up"
+    description: "Ramps light brightness from 1% to 100% (2700K) using native 15m transition and ramps music volume from 5% to 35%."
+    icon: mdi:weather-sunset-up
+    mode: restart
+    sequence:
+      # 1. Check master automation toggle
+      - condition: state
+        entity_id: input_boolean.kids_bedroom_automations
+        state: "on"
+
+      # 2. Set initial speaker volume low (5%)
+      - action: media_player.volume_set
+        target:
+          entity_id: media_player.jukebox_jukebox
+        data:
+          volume_level: 0.05
+
+      # 3. Start Music Assistant Playlist (Library ID 19)
+      - choose:
+          - conditions:
+              - condition: template
+                value_template: "{{ 'music_assistant' in integration_entities('music_assistant') or true }}"
+            sequence:
+              - action: music_assistant.play_media
+                target:
+                  entity_id: media_player.jukebox_jukebox
+                data:
+                  media_type: playlist
+                  media_id: "19"
+        default:
+          - action: media_player.play_media
+            target:
+              entity_id: media_player.jukebox_jukebox
+            data:
+              media_content_type: playlist
+              media_content_id: "19"
+
+      # 4. Turn on lights at minimum brightness (1%) and reset color temperature to 2700K
+      - action: light.turn_on
+        target:
+          entity_id: >-
+            {{ 'light.kids_bedroom_lights' if states('light.kids_bedroom_lights') not in ['unavailable', 'unknown', 'none'] else 'light.kids_bedroom_bulbs' }}
+        data:
+          brightness_pct: 1
+          color_temp_kelvin: 2700
+
+      # 5. Native 15-minute (900s) hardware transition to 100% brightness
+      - action: light.turn_on
+        target:
+          entity_id: >-
+            {{ 'light.kids_bedroom_lights' if states('light.kids_bedroom_lights') not in ['unavailable', 'unknown', 'none'] else 'light.kids_bedroom_bulbs' }}
+        data:
+          brightness_pct: 100
+          transition: 900
+
+      # 6. Volume ramp over 15 minutes (0.05 to 0.35)
+      - repeat:
+          count: 15
+          sequence:
+            - delay:
+                seconds: 60
+
+            # Abort ramp if master automation toggle was switched off
+            - condition: state
+              entity_id: input_boolean.kids_bedroom_automations
+              state: "on"
+
+            # Check if music is still playing; if stopped/paused manually, stop volume ramp
+            - condition: template
+              value_template: "{{ states('media_player.jukebox_jukebox') == 'playing' }}"
+
+            # Step speaker volume (+0.02 per minute up to 0.35)
+            - action: media_player.volume_set
+              target:
+                entity_id: media_player.jukebox_jukebox
+              data:
+                volume_level: "{{ [0.35, ((0.05 + (repeat.index * 0.02)) | round(2))] | min }}"
+
+  kids_bedroom_stop_morning_routine:
+    alias: "Kids Bedroom: Stop Routine & Turn Off"
+    description: "Stops music playback and turns off the bedroom lights."
+    icon: mdi:stop-circle-outline
+    mode: single
+    sequence:
+      - action: script.turn_off
+        target:
+          entity_id: script.kids_bedroom_morning_wakeup
+      - action: media_player.media_stop
+        target:
+          entity_id: media_player.jukebox_jukebox
+      - action: light.turn_off
+        target:
+          entity_id: >-
+            {{ 'light.kids_bedroom_lights' if states('light.kids_bedroom_lights') not in ['unavailable', 'unknown', 'none'] else 'light.kids_bedroom_bulbs' }}
+
+# ---------------------------------------------------------------------------
+# Automations
+# ---------------------------------------------------------------------------
+
+automation:
+  # 1. Morning Wake-Up Trigger: Weekdays at 07:00
+  - id: kids_bedroom_morning_wakeup_auto
+    alias: "Kids Bedroom: Morning Wake-Up Routine"
+    description: "Triggers the 15-minute fade-in light and music wake-up routine Monday to Friday at 07:00."
+    triggers:
+      - trigger: time
+        at: "07:00:00"
+    conditions:
+      - condition: state
+        entity_id: input_boolean.kids_bedroom_automations
+        state: "on"
+      - condition: time
+        weekday:
+          - mon
+          - tue
+          - wed
+          - thu
+          - fri
+    actions:
+      - action: script.kids_bedroom_morning_wakeup
+
+  # 2. Shelly Relay Fail-Safe: Keep relay ON so Trådfri bulbs stay powered
+  - id: shelly_kids_keep_relay_powered
+    alias: "Shelly Kids Bedroom: Keep Relay Power On"
+    description: "Guarantees switch.shelly_1_kids relay stays closed/ON to maintain permanent mains power to the IKEA bulbs."
+    triggers:
+      - trigger: state
+        entity_id: switch.shelly_1_kids
+        to: "off"
+    actions:
+      # If the Shelly is still in default switch mode, toggling the physical switch cuts relay power.
+      # When that happens, toggle the light group and turn relay back on immediately.
+      - action: light.toggle
+        target:
+          entity_id: >-
+            {{ 'light.kids_bedroom_lights' if states('light.kids_bedroom_lights') not in ['unavailable', 'unknown', 'none'] else 'light.kids_bedroom_bulbs' }}
+      - action: switch.turn_on
+        target:
+          entity_id: switch.shelly_1_kids
+
+  # 3. Physical Wall Switch Toggle (for Detached Mode or input events)
+  - id: shelly_kids_wall_switch_toggle
+    alias: "Shelly Kids Bedroom: Wall Switch Toggle"
+    description: "Toggles the light group whenever the physical wall switch input changes state in detached mode."
+    mode: single
+    triggers:
+      # Input binary sensor or event entity (if exposed by ZHA in detached mode)
+      - trigger: state
+        entity_id:
+          - binary_sensor.shelly_1_kids_input
+          - event.shelly_1_kids_input
+    actions:
+      - action: light.toggle
+        target:
+          entity_id: >-
+            {{ 'light.kids_bedroom_lights' if states('light.kids_bedroom_lights') not in ['unavailable', 'unknown', 'none'] else 'light.kids_bedroom_bulbs' }}
