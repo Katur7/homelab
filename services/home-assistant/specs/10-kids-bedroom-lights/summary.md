@@ -7,7 +7,8 @@ Implemented Milestone 10 for the Kids' Bedroom:
    - Native ZHA Zigbee group (`light.kids_bedroom_lights`) for multicast synchronisation across `light.ikea_kids1`, `light.ikea_kids2`, and `light.ikea_kids3`.
 2. **Shelly 1 Detached Mode & Direct Binding**:
    - Configured Shelly 1 Gen4 in Detached mode and direct-bound its `OnOff` client cluster to the ZHA Light Group for offline local control.
-   - Added custom ZHA quirk (`services/home-assistant/config/zha_quirks/shelly_1_gen4.py`) for `("Shelly", "1")` so ZHA exposes the detached `Input` as a controllable `switch` (`switch.shelly_1_kids_input`) under **Controls** on the Shelly Zigbee device card, synced two-way with `light.kids_bedroom_lights`.
+   - Added custom ZHA quirk (`services/home-assistant/config/zha_quirks/shelly_1_gen4.py`) for `("Shelly", "1")` so ZHA exposes the detached `Input` as a standard `binary_sensor` under **Sensors** on the Shelly Zigbee device card.
+   - Added `shelly_kids_out_of_sync_toggle` automation so flipping the wall switch always toggles the lights even if the lights were previously changed from Home Assistant.
 3. **Master Automation Control**:
    - `input_boolean.kids_bedroom_automations`: UI toggle to pause/disable scheduled routines (e.g., during school holidays) without breaking physical wall switch operation.
 4. **Morning Wake-Up Routine**:

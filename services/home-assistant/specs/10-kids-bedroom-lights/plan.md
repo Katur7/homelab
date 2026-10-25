@@ -43,7 +43,8 @@ flowchart TD
 2. **Shelly Detached Mode & Zigbee Direct Binding**:
    - The Shelly 1 is configured in **Detached Mode** so the relay stays closed/ON permanently, supplying continuous AC mains power to the IKEA bulbs.
    - The Shelly is **direct-bound via Zigbee** to the ZHA Light Group (`light.kids_bedroom_lights`), allowing the physical wall switch to turn the bulbs on and off directly over the Zigbee mesh even if Home Assistant is offline.
-   - A custom ZHA Quirk (`services/home-assistant/config/zha_quirks/shelly_1_gen4.py`) registers the Shelly's Endpoint 2 `OnOff` client cluster (`Manufacturer: "Shelly", Model: "1"`) as a controllable `switch` (`switch.shelly_1_kids_input`, `EntityType.STANDARD`) under **Controls** on the Shelly Zigbee device in Home Assistant, kept in two-way sync with `light.kids_bedroom_lights` via `automation.shelly_kids_input_light_sync`.
+   - A custom ZHA Quirk (`services/home-assistant/config/zha_quirks/shelly_1_gen4.py`) registers the Shelly's Endpoint 2 `OnOff` client cluster (`Manufacturer: "Shelly", Model: "1"`) as a standard `binary_sensor` (`Input`, `EntityType.STANDARD`) under **Sensors** on the Shelly Zigbee device in Home Assistant.
+   - `automation.shelly_kids_out_of_sync_toggle` detects if the physical rocker switch was out of sync with `light.kids_bedroom_lights` (e.g. after toggling lights in HA) and toggles the lights on the first flip so there is no fixed On/Off position.
 
 3. **Morning Wake-up Automation (07:00 – 07:15, Mon–Fri)**:
    - Triggers at 07:00 on weekdays (Mon–Fri) when `input_boolean.kids_bedroom_automations` is `on`.
