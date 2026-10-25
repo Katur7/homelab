@@ -147,14 +147,18 @@ automation:
     mode: single
     max_exceeded: silent
     triggers:
-      - trigger: event
-        event_type: zha_event
+      - trigger: state
+        entity_id: binary_sensor.kids_bedroom_shelly_1_kids_input
+        from:
+          - "on"
+          - "off"
+        to:
+          - "on"
+          - "off"
     conditions:
       - condition: template
         value_template: >-
-          {{ trigger.event.data.device_id == device_id('switch.shelly_1_kids')
-             and (trigger.event.data.command | lower) in ['on', 'off']
-             and states('light.kids_bedroom_lights') == (trigger.event.data.command | lower)
+          {{ states('light.kids_bedroom_lights') == trigger.to_state.state
              and (now() - states.light.kids_bedroom_lights.last_changed).total_seconds() > 2 }}
     actions:
       - action: light.toggle
