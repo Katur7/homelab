@@ -1,6 +1,19 @@
 - triggers:
     - trigger: time_pattern
-      hours: /2
+      hours: /1
+    - trigger: homeassistant
+      event: start
+    - trigger: event
+      event_type: event_template_reloaded
+    - trigger: state
+      entity_id: weather.tomorrow_io_home_daily
+      from:
+        - unavailable
+        - unknown
+  conditions:
+    - condition: template
+      value_template: >
+        {{ states('weather.tomorrow_io_home_daily') not in ['unavailable', 'unknown'] }}
   actions:
     - action: weather.get_forecasts
       target:
@@ -8,44 +21,83 @@
       data:
         type: hourly
       response_variable: hourly
+    - variables:
+        metrics: >
+          {% set raw = hourly.get('weather.tomorrow_io_home_daily', {}).get('forecast', []) %}
+          {% set start = now().replace(minute=0, second=0, microsecond=0) %}
+          {% set local_today = start.date() %}
+          {% set ns = namespace(
+            anchor=none,
+            count_12h=0,
+            prob_12h=0,
+            prob_24h=0,
+            prob_today=0,
+            mm_12h=0.0,
+            weighted_mm_12h=0.0,
+            mm_24h=0.0,
+            mm_today=0.0,
+            next_rain_at=none
+          ) %}
+          {% for f in raw %}
+            {% set dt = f.get('datetime') | as_datetime %}
+            {% if dt is not none %}
+              {% set dt = dt | as_local %}
+              {% if dt >= start %}
+                {% if ns.anchor is none %}
+                  {% set ns.anchor = dt %}
+                {% endif %}
+                {% set mm = f.get('precipitation') | float(0) %}
+                {% set prob = f.get('precipitation_probability') | float(0) | round(0) | int(0) %}
+                {% if dt < ns.anchor + timedelta(hours=12) %}
+                  {% set ns.count_12h = ns.count_12h + 1 %}
+                  {% set ns.mm_12h = ns.mm_12h + mm %}
+                  {% set ns.weighted_mm_12h = ns.weighted_mm_12h + (mm * prob / 100.0) %}
+                  {% if prob > ns.prob_12h %}
+                    {% set ns.prob_12h = prob %}
+                  {% endif %}
+                {% endif %}
+                {% if dt < ns.anchor + timedelta(hours=24) %}
+                  {% set ns.mm_24h = ns.mm_24h + mm %}
+                  {% if prob > ns.prob_24h %}
+                    {% set ns.prob_24h = prob %}
+                  {% endif %}
+                  {% if ns.next_rain_at is none and (mm >= 0.1 or prob >= 40) %}
+                    {% set ns.next_rain_at = dt.isoformat() %}
+                  {% endif %}
+                {% endif %}
+                {% if dt.date() == local_today %}
+                  {% set ns.mm_today = ns.mm_today + mm %}
+                  {% if prob > ns.prob_today %}
+                    {% set ns.prob_today = prob %}
+                  {% endif %}
+                {% endif %}
+              {% endif %}
+            {% endif %}
+          {% endfor %}
+          {{ {
+            'available': ns.count_12h > 0,
+            'prob_12h': ns.prob_12h,
+            'prob_today': ns.prob_today,
+            'prob_24h': ns.prob_24h,
+            'mm_12h': ns.mm_12h | round(1),
+            'weighted_mm_12h': ns.weighted_mm_12h | round(1),
+            'mm_today': ns.mm_today | round(1),
+            'mm_24h': ns.mm_24h | round(1),
+            'next_rain_at': ns.next_rain_at
+          } }}
   sensor:
     - name: "Expected Rain"
       unique_id: expected_rain
       icon: "mdi:weather-rainy"
-      state: >
-        {% set forecast = hourly
-            .get('weather.tomorrow_io_home_daily', {})
-            .get('forecast', []) %}
-
-        {% set today = now().date().isoformat() %}
-        {% set todays = forecast | selectattr('datetime', 'search', today) | list %}
-
-        {% if not todays %}
-          None
-        {% else %}
-          {% set total_rain = todays | map(attribute='precipitation') | sum %}
-          {% if total_rain == 0 %}
-            0
-          {% else %}
-            {% set ns = namespace(weighted=0) %}
-            {% for f in todays %}
-              {% set ns.weighted = ns.weighted + (f.precipitation * (f.precipitation_probability / 100)) %}
-            {% endfor %}
-            
-            {{ (ns.weighted / total_rain) | round(1) }}
-          {% endif %}
-        {% endif %}
+      unit_of_measurement: "%"
+      state_class: measurement
+      availability: "{{ metrics.available | default(false) }}"
+      state: "{{ metrics.prob_12h }}"
       attributes:
-        max_precipitation_probability: >
-          {% set forecast = hourly
-            .get('weather.tomorrow_io_home_daily', {})
-            .get('forecast', []) %}
-
-          {% set today = now().date().isoformat() %}
-          {% set todays = forecast | selectattr('datetime', 'search', today) | list %}
-
-          {% if not todays %}
-            None
-          {% else %}
-            {{ todays | map(attribute='precipitation_probability') | max / 100 }}
-          {% endif %}
+        precipitation_next_12h_mm: "{{ metrics.mm_12h }}"
+        expected_next_12h_mm: "{{ metrics.weighted_mm_12h }}"
+        precipitation_today_mm: "{{ metrics.mm_today }}"
+        precipitation_next_24h_mm: "{{ metrics.mm_24h }}"
+        probability_today_pct: "{{ metrics.prob_today }}"
+        probability_next_24h_pct: "{{ metrics.prob_24h }}"
+        next_rain_at: "{{ metrics.next_rain_at }}"
