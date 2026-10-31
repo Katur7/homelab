@@ -6,7 +6,14 @@
 
 set -euo pipefail
 
-PIHOLE_HOST="http://192.168.86.27"
+PIHOLE_HOST="${PIHOLE_HOST:-}"
+if [[ -z "$PIHOLE_HOST" ]]; then
+  if curl -sf --connect-timeout 2 "http://192.168.86.27/api/info" > /dev/null 2>&1; then
+    PIHOLE_HOST="http://192.168.86.27"
+  else
+    PIHOLE_HOST="https://pihole.internal.pippinn.me"
+  fi
+fi
 IPV4="192.168.86.17"
 IPV6="2001:9b1:c5c0:7e00:16da:e9ff:fe68:6362"
 DOMAIN_SUFFIX="pippinn.me"
