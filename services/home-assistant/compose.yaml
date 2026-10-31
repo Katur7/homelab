@@ -2,7 +2,7 @@ name: home-assistant
 
 services:
   homeassistant:
-    image: ghcr.io/home-assistant/home-assistant:2026.10.2
+    image: ghcr.io/home-assistant/home-assistant:2026.10.4
     container_name: homeassistant
     restart: unless-stopped
     network_mode: host
