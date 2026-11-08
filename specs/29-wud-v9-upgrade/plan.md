@@ -30,7 +30,7 @@ Add WUD as a registered OpenID Connect client in `infrastructure/gateway/config/
 - **Authorization Policy:** `two_factor`
 - **Redirect URIs:** `https://update.internal.pippinn.me/auth/oidc/authelia/cb`
 - **Scopes:** `openid`, `profile`, `email`, `groups`
-- **Authentication Method:** `client_secret_basic` (WUD transmits credentials via HTTP Basic header).
+- **Authentication Method:** `client_secret_post` (WUD transmits credentials in HTTP POST body).
 - **PKCE:** `require_pkce: false` (WUD confidential client flow does not use PKCE).
 - **Response & Grant Types:** `code` / `authorization_code`.
 - **Userinfo Response:** `userinfo_signed_response_alg: 'none'` (WUD expects standard JSON claims response).
@@ -130,7 +130,7 @@ Add `/infrastructure/wud/store/` to `.gitignore` under `# Service state`:
              - 'authorization_code'
            access_token_signed_response_alg: 'none'
            userinfo_signed_response_alg: 'none'
-           token_endpoint_auth_method: 'client_secret_basic'
+           token_endpoint_auth_method: 'client_secret_post'
    ```
 3. Restart Authelia to reload configuration (Compose `up -d` does not reload bind-mount edits):
    ```bash
