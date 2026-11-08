@@ -15,6 +15,14 @@ http:
         - websecure
       rule: "Host (`monitoring.internal.pippinn.me`)"
       service: monitoring
+    t3:
+      entryPoints:
+        - websecure
+      rule: "Host(`t3.internal.pippinn.me`)"
+      middlewares:
+        - internal-only@file
+        - authelia-auth@file
+      service: t3
 
   services:
     uptime:
@@ -31,4 +39,9 @@ http:
       loadBalancer:
         servers:
           - url: "http://192.168.86.26:8090"
+        passHostHeader: true
+    t3:
+      loadBalancer:
+        servers:
+          - url: "http://172.17.0.1:3773"
         passHostHeader: true

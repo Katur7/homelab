@@ -40,6 +40,8 @@ access_control:
       policy: bypass
     
     # Secured sites
+    - domain: 't3.internal.pippinn.me'
+      policy: two_factor
     - domain: todo.pippinn.me
       policy: two_factor
     - domain: photos.pippinn.me
