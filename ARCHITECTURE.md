@@ -14,6 +14,7 @@
 **Plex Transcoding** (hardware acceleration): Intel QuickSync via `/dev/dri` with dedicated 4GB RAM `tmpfs` transcode buffer (`/transcode`)  
 **Beszel Hub** (system & S.M.A.R.T. monitoring): `http://192.168.86.26:8090` — exposed via Traefik at `monitoring.internal.pippinn.me`; agents on Pi and NAS (`SYS_RAWIO` drive monitoring)  
 **Dozzle** (container logs & lifecycle): `https://logs.internal.pippinn.me` — real-time container log dashboard and container action manager on NAS (hardened via gateway `socket-proxy`); connected to Dozzle agent on Raspberry Pi (`192.168.86.26:7007`, hardened via local `socket-proxy`) for unified multi-host monitoring  
+**T3 Code** (agent harness control surface): `http://172.17.0.1:3773` — host daemon under user `grimur` (`t3code.service`), exposed at `https://t3.internal.pippinn.me` via Traefik with Authelia 2FA and LAN allowlist  
 
 ---
 
