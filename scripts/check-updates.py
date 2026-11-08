@@ -66,8 +66,26 @@ BREAKING_PATTERNS = re.compile(
 )
 
 
-def http_get(url: str, is_json: bool = True, timeout: int = 15) -> Any:
-    req = urllib.request.Request(url, headers=HEADERS)
+def get_wud_token() -> str:
+    token = os.environ.get("WUD_API_TOKEN", "")
+    if not token:
+        env_path = os.path.join(os.path.dirname(__file__), "..", "infrastructure", "wud", ".env")
+        if os.path.exists(env_path):
+            with open(env_path) as f:
+                for line in f:
+                    if line.startswith("WUD_API_TOKEN="):
+                        return line.split("=", 1)[1].strip()
+    return token
+
+
+def http_get(
+    url: str,
+    is_json: bool = True,
+    timeout: int = 15,
+    headers: Optional[Dict[str, str]] = None,
+) -> Any:
+    req_headers = headers if headers is not None else HEADERS
+    req = urllib.request.Request(url, headers=req_headers)
     with urllib.request.urlopen(req, timeout=timeout) as resp:
         content = resp.read().decode("utf-8", errors="ignore")
         if is_json:
@@ -631,7 +649,11 @@ def process_container(container: dict) -> str:
 
 def main():
     try:
-        raw_containers = http_get(WUD_URL, is_json=True, timeout=15)
+        wud_token = get_wud_token()
+        wud_headers = {"User-Agent": "homelab-check-updates/1.0"}
+        if wud_token:
+            wud_headers["Authorization"] = f"Bearer {wud_token}"
+        raw_containers = http_get(WUD_URL, is_json=True, timeout=15, headers=wud_headers)
     except Exception as e:
         print(f"Error querying WUD at {WUD_URL}: {e}", file=sys.stderr)
         sys.exit(1)
