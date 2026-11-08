@@ -10,12 +10,14 @@ networks:
 
 services:
   whatsupdocker:
-    image: getwud/wud:8.4.0
+    image: getwud/wud:9.7.0
     container_name: update
     env_file:
       - ../../global.env
       - vars.env
       - .env
+    volumes:
+      - ./store:/store
     networks:
       - traefik_internal
       - socket_proxy
@@ -25,6 +27,7 @@ services:
       - "traefik.enable=true"
       - "traefik.http.routers.wud.entrypoints=websecure"
       - "traefik.http.routers.wud.rule=Host(`update.internal.pippinn.me`)"
+      - "traefik.http.services.wud.loadbalancer.server.port=3000"
       - "traefik.docker.network=traefik_internal"
     restart: unless-stopped
     deploy:

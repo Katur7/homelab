@@ -14,7 +14,8 @@ Check What's Up Docker for pending container updates, summarise release notes, h
 
 Run:
 ```bash
-curl -s https://update.internal.pippinn.me/api/containers | jq '[.[] | select(.updateAvailable == true)]'
+TOKEN=$(grep -E '^WUD_API_TOKEN=' infrastructure/wud/.env | cut -d= -f2-)
+curl -s -H "Authorization: Bearer $TOKEN" https://update.internal.pippinn.me/api/containers | jq '[.[] | select(.updateAvailable == true)]'
 ```
 
 If the curl fails (WUD unreachable), stop and report the error clearly.

@@ -131,4 +131,25 @@ identity_providers:
           - 'openid'
           - 'profile'
           - 'email'
+      - client_id: 'wud'
+        client_name: "What's Up Docker"
+        client_secret: '$pbkdf2-sha512$310000$lMteX6AHOHjwYpkQPhDHVg$TzipI2Ivk2jUVYUGLe.o4IBXvusHv6btnyTlilnlzgt6MrtDNUFxL8nsJmoiZ.ZVe/XqRkhbqSa8AFHU7VKN.g'
+        public: false
+        authorization_policy: 'two_factor'
+        require_pkce: false
+        redirect_uris:
+          - 'https://update.internal.pippinn.me/auth/oidc/authelia/cb'
+        scopes:
+          - 'openid'
+          - 'profile'
+          - 'email'
+          - 'groups'
+        response_types:
+          - 'code'
+        grant_types:
+          - 'authorization_code'
+        access_token_signed_response_alg: 'none'
+        userinfo_signed_response_alg: 'none'
+        token_endpoint_auth_method: 'client_secret_basic'
+
 

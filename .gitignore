@@ -41,6 +41,7 @@ volumes/
 /services/hermes/data/
 /services/laya/data/
 /services/laya/cache/
+/infrastructure/wud/store/
 
 # Gateway — sensitive runtime files only (most config IS git-tracked)
 /infrastructure/gateway/config/acme.json
