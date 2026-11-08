@@ -40,7 +40,7 @@ services:
     build: .
     image: autoupdater:local
     container_name: autoupdater
-    user: "1000:992"
+    user: "1000:995"
     env_file:
       - ../../global.env
       - .env

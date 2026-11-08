@@ -9,6 +9,7 @@ import datetime
 import json
 import logging
 import os
+import re
 import subprocess
 import threading
 import time
@@ -79,24 +80,32 @@ def container_full_image(container_name: str) -> str:
     return ref.rsplit(":", 1)[0] if ":" in ref else ref
 
 
-def update_compose_tag(compose_path: str, old_tag: str, new_tag: str) -> bool:
-    """Replace old_tag with new_tag in compose file. Returns True if changed."""
+def update_compose_tag(compose_path: str, service: str, old_tag: str, new_tag: str) -> bool:
+    """Replace old_tag with new_tag in compose file scoped to service image. Returns True if changed."""
     with open(compose_path) as f:
         content = f.read()
-    new_content = content.replace(old_tag, new_tag, 1)
-    if new_content == content:
+
+    # Match the image line within the specific service block
+    pattern = rf"(^\s*{re.escape(service)}:[\s\S]*?image:[^\n:]+:){re.escape(old_tag)}(\s*(?:#.*)?$)"
+    new_content, count = re.subn(pattern, rf"\g<1>{new_tag}\2", content, count=1, flags=re.MULTILINE)
+    if count == 0:
         return False
     with open(compose_path, "w") as f:
         f.write(new_content)
     return True
 
 
-def revert_compose_tag(compose_path: str, new_tag: str, old_tag: str) -> None:
+def revert_compose_tag(compose_path: str, service: str, new_tag: str, old_tag: str) -> None:
     with open(compose_path) as f:
         content = f.read()
-    with open(compose_path, "w") as f:
-        f.write(content.replace(new_tag, old_tag, 1))
-    log.info("Reverted %s in %s back to %s", new_tag, compose_path, old_tag)
+    pattern = rf"(^\s*{re.escape(service)}:[\s\S]*?image:[^\n:]+:){re.escape(new_tag)}(\s*(?:#.*)?$)"
+    new_content, count = re.subn(pattern, rf"\g<1>{old_tag}\2", content, count=1, flags=re.MULTILINE)
+    if count > 0:
+        with open(compose_path, "w") as f:
+            f.write(new_content)
+        log.info("Reverted %s in %s back to %s for service %s", new_tag, compose_path, old_tag, service)
+    else:
+        log.error("Failed to revert %s back to %s in %s for service %s", new_tag, old_tag, compose_path, service)
 
 
 def wait_for_healthy(container_name: str, timeout: int = 30) -> bool:
@@ -285,13 +294,13 @@ def handle_update(payload: dict) -> None:
     log.info("Pull complete")
 
     # Edit compose.yaml
-    log.info("Updating compose tag: %s → %s in %s", old_tag, new_tag, compose_path)
-    if not update_compose_tag(compose_path, old_tag, new_tag):
+    log.info("Updating compose tag: %s → %s in %s for %s", old_tag, new_tag, compose_path, service)
+    if not update_compose_tag(compose_path, service, old_tag, new_tag):
         with open(compose_path) as f:
             if new_tag in f.read():
                 log.info("Tag %s already present in %s — skipping (duplicate webhook?)", new_tag, compose_path)
                 return
-        log.error("Tag %s not found in %s — aborting", old_tag, compose_path)
+        log.error("Tag %s not found in %s for service %s — aborting", old_tag, compose_path, service)
         notify_failure(service, old_tag, new_tag, "Tag not found in compose file")
         return
 
@@ -304,7 +313,7 @@ def handle_update(payload: dict) -> None:
     )
     if up.returncode != 0:
         log.error("docker compose up failed: %s", up.stderr.strip())
-        revert_compose_tag(compose_path, new_tag, old_tag)
+        revert_compose_tag(compose_path, service, new_tag, old_tag)
         _rollback(container_name, image_ref, old_tag, old_image_id, compose_path, service)
         notify_failure(service, old_tag, new_tag, "docker compose up failed")
         return
@@ -313,7 +322,7 @@ def handle_update(payload: dict) -> None:
     # Health check
     if not wait_for_healthy(container_name):
         log.error("Health check failed — rolling back %s to %s", service, old_tag)
-        revert_compose_tag(compose_path, new_tag, old_tag)
+        revert_compose_tag(compose_path, service, new_tag, old_tag)
         _rollback(container_name, image_ref, old_tag, old_image_id, compose_path, service)
         notify_failure(service, old_tag, new_tag, f"Health check failed — rolled back {new_tag} → {old_tag}")
         return
