@@ -2,9 +2,10 @@
 """
 CLI script to query WUD for pending container updates, resolve source repositories,
 fetch release notes between local and remote versions, detect breaking changes,
-and output a structured Markdown report.
+and output structured JSON or a human-readable Markdown report.
 """
 
+import argparse
 import html
 import json
 import os
@@ -30,7 +31,7 @@ STATIC_REPO_LOOKUP: Dict[str, Tuple[str, str]] = {
     "homeassistant/home-assistant": ("github", "home-assistant/core"),
     "ghcr.io/home-assistant-libs/python-matter-server": ("github", "home-assistant-libs/python-matter-server"),
     "ghcr.io/advplyr/audiobookshelf": ("github", "advplyr/audiobookshelf"),
-    "vikunja/vikunja": ("vikunja", "https://kolaente.dev/vikunja/vikunja/releases"),
+    "vikunja/vikunja": ("github", "go-vikunja/vikunja"),
     "ghcr.io/mealie-recipes/mealie": ("github", "mealie-recipes/mealie"),
     "ghcr.io/immich-app/immich-server": ("github", "immich-app/immich"),
     "ghcr.io/simjanos-dev/linguacafe-webserver": ("github", "simjanos-dev/LinguaCafe"),
@@ -91,6 +92,52 @@ def http_get(
         if is_json:
             return json.loads(content)
         return content
+
+
+def clean_html(raw_html: str) -> str:
+    """Strip HTML boilerplate (scripts, styles, navbars) and convert to clean markdown/text."""
+    if not raw_html:
+        return ""
+    # Extract article or body if present
+    m = re.search(r"<article[^>]*>(.*?)</article>", raw_html, re.DOTALL | re.IGNORECASE)
+    if m:
+        content = m.group(1)
+    else:
+        m_main = re.search(r"<main[^>]*>(.*?)</main>", raw_html, re.DOTALL | re.IGNORECASE)
+        if m_main:
+            content = m_main.group(1)
+        else:
+            m_body = re.search(r"<body[^>]*>(.*?)</body>", raw_html, re.DOTALL | re.IGNORECASE)
+            content = m_body.group(1) if m_body else raw_html
+
+    # Strip scripts, styles, svg, nav, header, footer
+    content = re.sub(
+        r"<(script|style|svg|nav|header|footer)[^>]*>.*?</\1>",
+        "",
+        content,
+        flags=re.DOTALL | re.IGNORECASE,
+    )
+    # Convert headings to markdown
+    content = re.sub(r"<h[1-6][^>]*>(.*?)</h[1-6]>", r"\n### \1\n", content, flags=re.DOTALL | re.IGNORECASE)
+    # Convert list items
+    content = re.sub(r"<li[^>]*>(.*?)</li>", r"\n- \1", content, flags=re.DOTALL | re.IGNORECASE)
+    # Convert paragraphs and breaks
+    content = re.sub(r"<br\s*/?>", r"\n", content, flags=re.IGNORECASE)
+    content = re.sub(r"</?p[^>]*>", r"\n\n", content, flags=re.IGNORECASE)
+    # Strip remaining HTML tags
+    content = re.sub(r"<[^>]+>", " ", content)
+    # Unescape HTML entities
+    content = html.unescape(content)
+    # Collapse excess whitespace
+    content = re.sub(r"[ \t]+", " ", content)
+    content = re.sub(r"\n\s*\n+", "\n\n", content)
+
+    # Size limit guardrail: truncate if exceeding 120KB
+    max_size = 120000
+    if len(content) > max_size:
+        content = content[:max_size] + "\n\n... [Content truncated to 120KB] ..."
+
+    return content.strip()
 
 
 def normalize_version(tag: str) -> str:
@@ -205,7 +252,7 @@ def filter_releases_between(
         tag = r.get("tag_name", "")
         tag_lower = tag.lower()
 
-        # Skip nightly/develop releases if the target tag is a stable release
+        # Skip nightly/develop releases if target tag is stable
         if not is_nightly and "nightly" in tag_lower:
             continue
         if not is_develop and "develop" in tag_lower:
@@ -213,7 +260,6 @@ def filter_releases_between(
 
         norm_r = normalize_version(tag)
 
-        # Some repos use tag prefixes like 'release-2.0'
         matches_remote = norm_r == norm_remote or tag == remote_tag or remote_tag in tag
         matches_local = norm_r == norm_local or tag == local_tag or local_tag in tag
 
@@ -226,9 +272,8 @@ def filter_releases_between(
                 break
             selected.append(r)
 
-    # Fallback: if remote not found directly (e.g. slight tag variation), take the first release
+    # Fallback: if remote not found directly, take the newest release
     if not selected and releases:
-        # Pick the first non-nightly/non-develop release if possible
         for r in releases:
             t = r.get("tag_name", "").lower()
             if (is_nightly or "nightly" not in t) and (is_develop or "develop" not in t):
@@ -240,168 +285,211 @@ def filter_releases_between(
     return selected
 
 
-def extract_summary_and_breaking(
-    releases: List[dict], semver_diff: str
-) -> Tuple[List[str], List[str], List[dict]]:
-    """
-    Parse release bodies to extract:
-    - releases_covered info (tag, url, title, has_breaking)
-    - summary bullets
-    - breaking changes bullets
-    """
-    releases_covered = []
-    summary_bullets = []
-    breaking_bullets = []
+def collect_container_data(container: dict) -> dict:
+    """Extract raw metadata and changelogs without regex truncation."""
+    name = container.get("name", "unknown")
+    img_name = container.get("image", {}).get("name", "")
+    uk = container.get("updateKind", {})
+    local_val = uk.get("localValue", "")
+    remote_val = uk.get("remoteValue", "")
+    semver_diff = uk.get("semverDiff", "unknown")
+    compose_file = get_compose_file(container)
 
-    for r in releases:
-        tag = r.get("tag_name", "")
-        name = r.get("name") or tag
-        url = r.get("html_url", "")
-        body = r.get("body") or ""
+    base_data = {
+        "name": name,
+        "image": img_name,
+        "local_version": local_val,
+        "remote_version": remote_val,
+        "semver_diff": semver_diff,
+        "compose_file": compose_file,
+        "is_linuxserver_rebuild_only": False,
+        "release_urls": [],
+        "raw_content": "",
+        "note": None,
+    }
 
-        # Check for breaking changes in this release
-        has_breaking = bool(BREAKING_PATTERNS.search(body)) or (semver_diff == "major")
-
-        # Extract explicit breaking change sections from markdown
-        # Headers like: ### ⚠️ Breaking Changes, ## Breaking changes, etc.
-        breaking_sec = re.findall(
-            r"(?:^|\n)#{1,4}\s*[^\n]*(?:breaking|migration|deprecat)[^\n]*\n(.*?)(?=\n#{1,4}\s|\Z)",
-            body,
-            re.IGNORECASE | re.DOTALL,
-        )
-        for sec in breaking_sec:
-            for line in sec.strip().splitlines():
-                line_str = line.strip()
-                if line_str.startswith(("- ", "* ")):
-                    bullet = re.sub(r"^[-*]\s+", "", line_str).strip()
-                    if bullet and bullet not in breaking_bullets:
-                        breaking_bullets.append(f"[{tag}] {bullet}")
-
-        # If no explicit section but pattern matched in text, grab matching lines
-        if has_breaking and not breaking_sec:
-            for line in body.splitlines():
-                line_str = line.strip()
-                if BREAKING_PATTERNS.search(line_str) and line_str.startswith(("- ", "* ")):
-                    bullet = re.sub(r"^[-*]\s+", "", line_str).strip()
-                    if bullet and bullet not in breaking_bullets:
-                        breaking_bullets.append(f"[{tag}] {bullet}")
-
-        # Extract summary bullets
-        bullet_count = 0
-        for line in body.splitlines():
-            line_str = line.strip()
-            # Skip empty lines, headers, full changelog link, contributor notes
-            if not line_str or line_str.startswith("#"):
-                continue
-            if re.search(r"(full changelog|contributors|@dependabot)", line_str, re.IGNORECASE):
-                continue
-            if line_str.startswith(("- ", "* ")):
-                bullet = re.sub(r"^[-*]\s+", "", line_str).strip()
-                if bullet and bullet not in summary_bullets and bullet not in breaking_bullets:
-                    summary_bullets.append(f"[{tag}] {bullet}")
-                    bullet_count += 1
-                    if bullet_count >= 3:
-                        break
-
-        # Fallback if no bullets were formatted in markdown
-        if bullet_count == 0:
-            first_line = ""
-            for l in body.splitlines():
-                if l.strip() and not l.strip().startswith("#"):
-                    first_line = l.strip()
-                    break
-            if first_line:
-                summary_bullets.append(f"[{tag}] {first_line[:120]}")
-
-        releases_covered.append(
-            {
-                "tag": tag,
-                "name": name,
-                "url": url,
-                "has_breaking": has_breaking,
-            }
-        )
-
-    return summary_bullets, breaking_bullets, releases_covered
-
-
-def process_home_assistant(
-    container: dict, local_val: str, remote_val: str, semver_diff: str
-) -> Tuple[List[str], List[str], List[dict]]:
-    """Special handling for Home Assistant blog posts and core releases."""
-    releases = fetch_github_releases("home-assistant/core")
-    rel_filtered = filter_releases_between(releases, local_val, remote_val)
-
-    summary_bullets, breaking_bullets, covered = extract_summary_and_breaking(
-        rel_filtered, semver_diff
+    # 1. LinuxServer images check
+    is_linuxserver = (
+        "linuxserver/" in img_name
+        or "lscr.io/linuxserver/" in img_name
+        or any(k in img_name for k in LINUXSERVER_UPSTREAM.keys())
     )
 
-    # For monthly releases, check blog post for backward-incompatible changes
-    for r in rel_filtered:
-        body = r.get("body", "")
-        m = re.search(r"https://www\.home-assistant\.io/blog/\d{4}/\d{2}/\d{2}/release-\d+/", body)
-        if m:
-            blog_url = m.group(0)
+    if is_linuxserver:
+        local_app, local_ls = parse_linuxserver_tag(local_val)
+        remote_app, remote_ls = parse_linuxserver_tag(remote_val)
+
+        # Check if ONLY the ls### bumped
+        if local_app and remote_app and local_app == remote_app and local_ls != remote_ls:
+            base_data["is_linuxserver_rebuild_only"] = True
+            base_data["note"] = (
+                f"linuxserver base image / security update only "
+                f"({local_ls} → {remote_ls} bump). No upstream app changes."
+            )
+            return base_data
+
+        # If app version changed on LinuxServer:
+        app_key = None
+        for k in LINUXSERVER_UPSTREAM.keys():
+            if k in img_name or k == name:
+                app_key = k
+                break
+
+        if app_key:
+            upstream_repo, docker_repo = LINUXSERVER_UPSTREAM[app_key]
+            release_urls: List[str] = []
+            raw_parts: List[str] = []
+
+            # Fetch upstream releases if available
+            if upstream_repo:
+                try:
+                    up_rels = fetch_github_releases(upstream_repo)
+                    up_filtered = filter_releases_between(
+                        up_rels, local_app or local_val, remote_app or remote_val
+                    )
+                    for r in up_filtered:
+                        url = r.get("html_url")
+                        if url and url not in release_urls:
+                            release_urls.append(url)
+                        tag = r.get("tag_name", "")
+                        r_name = r.get("name") or tag
+                        body = r.get("body") or ""
+                        raw_parts.append(f"## [{upstream_repo}] Release {tag} ({r_name})\n\n{body.strip()}")
+                except Exception as e:
+                    raw_parts.append(f"Notice: Failed to fetch upstream releases from {upstream_repo}: {e}")
+
+            # Fetch linuxserver docker releases
             try:
-                blog_html = http_get(blog_url, is_json=False, timeout=10)
-                # Find backward-incompatible section
-                bm = re.search(
-                    r"name=[\x27\x22](?:backward-incompatible-changes|breaking-changes)[\x27\x22].*?</h2>\s*(.*?)(?=<h2|\Z)",
-                    blog_html,
-                    re.IGNORECASE | re.DOTALL,
-                )
-                if bm:
-                    sec_text = bm.group(1)
-                    # Extract list items or headings
-                    items = re.findall(r"<li>(.*?)</li>", sec_text, re.DOTALL)
-                    for item in items[:8]:
-                        clean = re.sub(r"<[^>]+>", " ", item).strip()
-                        clean = html.unescape(clean)
-                        clean = re.sub(r"\s+", " ", clean)
-                        if clean and len(clean) > 10:
-                            breaking_bullets.append(f"[HA Blog] {clean}")
+                ls_rels = fetch_github_releases(docker_repo)
+                ls_filtered = filter_releases_between(ls_rels, local_val, remote_val)
+                for r in ls_filtered:
+                    url = r.get("html_url")
+                    if url and url not in release_urls:
+                        release_urls.append(url)
+                    tag = r.get("tag_name", "")
+                    r_name = r.get("name") or tag
+                    body = r.get("body") or ""
+                    raw_parts.append(f"## [{docker_repo}] Release {tag} ({r_name})\n\n{body.strip()}")
             except Exception:
                 pass
 
-    return summary_bullets, breaking_bullets, covered
+            base_data["release_urls"] = release_urls or [f"https://github.com/{docker_repo}/releases"]
+            base_data["raw_content"] = "\n\n---\n\n".join(raw_parts)
+            return base_data
+
+    # 2. Vikunja
+    if "vikunja" in img_name:
+        try:
+            releases = fetch_github_releases("go-vikunja/vikunja")
+            filtered = filter_releases_between(releases, local_val, remote_val)
+            release_urls = [r["html_url"] for r in filtered if r.get("html_url")]
+            raw_parts = []
+            for r in filtered:
+                tag = r.get("tag_name", "")
+                r_name = r.get("name") or tag
+                body = r.get("body") or ""
+                raw_parts.append(f"## Release {tag} ({r_name})\n\n{body.strip()}")
+            if raw_parts:
+                base_data["release_urls"] = release_urls
+                base_data["raw_content"] = "\n\n---\n\n".join(raw_parts)
+                return base_data
+        except Exception:
+            pass
+
+        # Fallback to kolaente.dev HTML if needed
+        try:
+            url = "https://kolaente.dev/vikunja/vikunja/releases"
+            raw_html = http_get(url, is_json=False, timeout=10)
+            base_data["release_urls"] = [url]
+            base_data["raw_content"] = clean_html(raw_html)
+            return base_data
+        except Exception as e:
+            base_data["release_urls"] = ["https://kolaente.dev/vikunja/vikunja/releases"]
+            base_data["note"] = f"Notice: Vikunja changelog fetch error: {e}"
+            return base_data
+
+    # 3. Home Assistant
+    if "home-assistant" in img_name or name == "homeassistant":
+        try:
+            releases = fetch_github_releases("home-assistant/core")
+            filtered = filter_releases_between(releases, local_val, remote_val)
+            release_urls = []
+            raw_parts = []
+
+            blog_urls_fetched = set()
+            for r in filtered:
+                url = r.get("html_url")
+                if url and url not in release_urls:
+                    release_urls.append(url)
+                body = r.get("body") or ""
+
+                # Look for blog post links in release body
+                b_matches = re.findall(
+                    r"https://www\.home-assistant\.io/blog/\d{4}/\d{2}/\d{2}/release-\d+/?",
+                    body,
+                )
+                for b_url in b_matches:
+                    b_url = b_url.rstrip("/") + "/"
+                    if b_url not in blog_urls_fetched:
+                        blog_urls_fetched.add(b_url)
+                        release_urls.insert(0, b_url)
+                        try:
+                            blog_html = http_get(b_url, is_json=False, timeout=12)
+                            cleaned_blog = clean_html(blog_html)
+                            raw_parts.append(f"# Home Assistant Blog Announcement ({b_url})\n\n{cleaned_blog}")
+                        except Exception as e:
+                            raw_parts.append(f"Notice: Failed to fetch blog post {b_url}: {e}")
+
+                tag = r.get("tag_name", "")
+                r_name = r.get("name") or tag
+                raw_parts.append(f"## Release {tag} ({r_name})\n\n{body.strip()}")
+
+            base_data["release_urls"] = release_urls or ["https://github.com/home-assistant/core/releases"]
+            base_data["raw_content"] = "\n\n---\n\n".join(raw_parts)
+            return base_data
+        except Exception as e:
+            base_data["release_urls"] = ["https://github.com/home-assistant/core/releases"]
+            base_data["note"] = f"Notice: Home Assistant changelog fetch error: {e}"
+            return base_data
+
+    # 4. Standard GitHub Images
+    gh_repo = resolve_github_repo(container)
+    if gh_repo:
+        try:
+            releases = fetch_github_releases(gh_repo)
+            filtered = filter_releases_between(releases, local_val, remote_val)
+            release_urls = [r["html_url"] for r in filtered if r.get("html_url")]
+            raw_parts = []
+            for r in filtered:
+                tag = r.get("tag_name", "")
+                r_name = r.get("name") or tag
+                body = r.get("body") or ""
+                raw_parts.append(f"## Release {tag} ({r_name})\n\n{body.strip()}")
+
+            base_data["release_urls"] = release_urls or [f"https://github.com/{gh_repo}/releases"]
+            base_data["raw_content"] = "\n\n---\n\n".join(raw_parts)
+            return base_data
+        except Exception as e:
+            base_data["release_urls"] = [f"https://github.com/{gh_repo}/releases"]
+            base_data["note"] = f"Notice: Could not fetch changelog details from {gh_repo}: {e}"
+            return base_data
+
+    # Fallback if no repo was resolved
+    base_data["note"] = "Upstream release notes URL could not be resolved automatically."
+    return base_data
 
 
-def process_vikunja(
-    local_val: str, remote_val: str
-) -> Tuple[List[str], List[str], List[dict]]:
-    """Fetch Vikunja release notes from Kolaente Gitea HTML."""
-    url = "https://kolaente.dev/vikunja/vikunja/releases"
-    html_content = http_get(url, is_json=False, timeout=10)
+def format_container_markdown(data: dict) -> str:
+    """Format container data as markdown (fallback for non-JSON mode)."""
+    name = data["name"]
+    local_val = data["local_version"]
+    remote_val = data["remote_version"]
+    semver_diff = data["semver_diff"]
+    compose_file = data["compose_file"]
+    note = data.get("note")
+    release_urls = data.get("release_urls") or []
+    raw_content = data.get("raw_content") or ""
 
-    covered = [
-        {
-            "tag": remote_val,
-            "name": f"Vikunja {remote_val}",
-            "url": url,
-            "has_breaking": False,
-        }
-    ]
-    summary = [f"Vikunja update from {local_val} to {remote_val} (see {url})"]
-    breaking: List[str] = []
-
-    # Simple scan for breaking keywords in release page
-    if BREAKING_PATTERNS.search(html_content):
-        breaking.append(f"Potential breaking change or migration noted on {url}")
-
-    return summary, breaking, covered
-
-
-def format_container_markdown(
-    name: str,
-    local_val: str,
-    remote_val: str,
-    semver_diff: str,
-    compose_file: str,
-    releases_covered: List[dict],
-    summary_bullets: List[str],
-    breaking_bullets: List[str],
-    note: Optional[str] = None,
-) -> str:
     lines = [
         f"## [{name}]  {local_val} → {remote_val}  ({semver_diff})",
         f"Compose file: `{compose_file}`",
@@ -411,19 +499,36 @@ def format_container_markdown(
     if note:
         lines.append(f"*{note}*")
         lines.append("")
-        return "\n".join(lines)
+        if data.get("is_linuxserver_rebuild_only"):
+            return "\n".join(lines)
 
     lines.append("### Releases covered")
-    if releases_covered:
-        for r in releases_covered:
-            tag = r["tag"]
-            url = r["url"]
-            name_text = r["name"]
-            breaking_flag = "  ⚠️ BREAKING" if r["has_breaking"] else ""
-            lines.append(f"- [{tag}]({url}) — {name_text}{breaking_flag}")
+    if release_urls:
+        for url in release_urls:
+            # Derive a label from url if possible
+            tag_match = re.search(r"tag/([^/?#]+)", url)
+            tag_label = tag_match.group(1) if tag_match else url
+            lines.append(f"- [{tag_label}]({url})")
     else:
         lines.append(f"- Version bump {local_val} → {remote_val}")
     lines.append("")
+
+    # Extract summary bullets from raw content
+    summary_bullets = []
+    breaking_bullets = []
+    for line in raw_content.splitlines():
+        line_str = line.strip()
+        if not line_str or line_str.startswith("#"):
+            continue
+        if line_str.startswith(("- ", "* ")):
+            bullet = re.sub(r"^[-*]\s+", "", line_str).strip()
+            if not bullet or len(bullet) < 5:
+                continue
+            if BREAKING_PATTERNS.search(bullet):
+                if bullet not in breaking_bullets:
+                    breaking_bullets.append(bullet)
+            elif bullet not in summary_bullets and len(summary_bullets) < 6:
+                summary_bullets.append(bullet)
 
     lines.append("### Summary")
     if summary_bullets:
@@ -445,209 +550,17 @@ def format_container_markdown(
     return "\n".join(lines)
 
 
-def process_container(container: dict) -> str:
-    name = container.get("name", "unknown")
-    img_name = container.get("image", {}).get("name", "")
-    uk = container.get("updateKind", {})
-    local_val = uk.get("localValue", "")
-    remote_val = uk.get("remoteValue", "")
-    semver_diff = uk.get("semverDiff", "unknown")
-    compose_file = get_compose_file(container)
-
-    # 1. LinuxServer images check
-    is_linuxserver = (
-        "linuxserver/" in img_name
-        or "lscr.io/linuxserver/" in img_name
-        or any(k in img_name for k in LINUXSERVER_UPSTREAM.keys())
-    )
-
-    if is_linuxserver:
-        local_app, local_ls = parse_linuxserver_tag(local_val)
-        remote_app, remote_ls = parse_linuxserver_tag(remote_val)
-
-        # Check if ONLY the ls### bumped
-        if local_app and remote_app and local_app == remote_app and local_ls != remote_ls:
-            note = (
-                f"linuxserver base image / security update only "
-                f"({local_ls} → {remote_ls} bump). No upstream app changes."
-            )
-            return format_container_markdown(
-                name=name,
-                local_val=local_val,
-                remote_val=remote_val,
-                semver_diff=semver_diff,
-                compose_file=compose_file,
-                releases_covered=[],
-                summary_bullets=[],
-                breaking_bullets=[],
-                note=note,
-            )
-
-        # If app version changed on LinuxServer:
-        app_key = None
-        for k in LINUXSERVER_UPSTREAM.keys():
-            if k in img_name or k == name:
-                app_key = k
-                break
-
-        if app_key:
-            upstream_repo, docker_repo = LINUXSERVER_UPSTREAM[app_key]
-            try:
-                # Fetch upstream releases if available
-                if upstream_repo:
-                    up_rels = fetch_github_releases(upstream_repo)
-                    up_filtered = filter_releases_between(
-                        up_rels, local_app or local_val, remote_app or remote_val
-                    )
-                    summary, breaking, covered = extract_summary_and_breaking(
-                        up_filtered, semver_diff
-                    )
-                else:
-                    summary, breaking, covered = [], [], []
-
-                # Also include linuxserver release link
-                ls_rels = fetch_github_releases(docker_repo)
-                ls_filtered = filter_releases_between(ls_rels, local_val, remote_val)
-                _, ls_breaking, ls_covered = extract_summary_and_breaking(
-                    ls_filtered, semver_diff
-                )
-
-                breaking.extend(ls_breaking)
-                covered.extend(ls_covered)
-
-                return format_container_markdown(
-                    name=name,
-                    local_val=local_val,
-                    remote_val=remote_val,
-                    semver_diff=semver_diff,
-                    compose_file=compose_file,
-                    releases_covered=covered,
-                    summary_bullets=summary,
-                    breaking_bullets=breaking,
-                )
-            except Exception as e:
-                return format_container_markdown(
-                    name=name,
-                    local_val=local_val,
-                    remote_val=remote_val,
-                    semver_diff=semver_diff,
-                    compose_file=compose_file,
-                    releases_covered=[],
-                    summary_bullets=[f"Upstream release notes: https://github.com/{upstream_repo or docker_repo}/releases"],
-                    breaking_bullets=[],
-                    note=f"Notice: Could not fetch changelog details: {e}",
-                )
-
-    # 2. Vikunja
-    if "vikunja" in img_name:
-        try:
-            summary, breaking, covered = process_vikunja(local_val, remote_val)
-            return format_container_markdown(
-                name=name,
-                local_val=local_val,
-                remote_val=remote_val,
-                semver_diff=semver_diff,
-                compose_file=compose_file,
-                releases_covered=covered,
-                summary_bullets=summary,
-                breaking_bullets=breaking,
-            )
-        except Exception as e:
-            return format_container_markdown(
-                name=name,
-                local_val=local_val,
-                remote_val=remote_val,
-                semver_diff=semver_diff,
-                compose_file=compose_file,
-                releases_covered=[],
-                summary_bullets=[],
-                breaking_bullets=[],
-                note=f"Notice: Vikunja changelog fetch error: {e}",
-            )
-
-    # 3. Home Assistant
-    if "home-assistant" in img_name or name == "homeassistant":
-        try:
-            summary, breaking, covered = process_home_assistant(
-                container, local_val, remote_val, semver_diff
-            )
-            return format_container_markdown(
-                name=name,
-                local_val=local_val,
-                remote_val=remote_val,
-                semver_diff=semver_diff,
-                compose_file=compose_file,
-                releases_covered=covered,
-                summary_bullets=summary,
-                breaking_bullets=breaking,
-            )
-        except Exception as e:
-            return format_container_markdown(
-                name=name,
-                local_val=local_val,
-                remote_val=remote_val,
-                semver_diff=semver_diff,
-                compose_file=compose_file,
-                releases_covered=[],
-                summary_bullets=[],
-                breaking_bullets=[],
-                note=f"Notice: Home Assistant changelog fetch error: {e}",
-            )
-
-    # 4. Standard GitHub Images
-    gh_repo = resolve_github_repo(container)
-    if gh_repo:
-        try:
-            releases = fetch_github_releases(gh_repo)
-            filtered = filter_releases_between(releases, local_val, remote_val)
-            summary, breaking, covered = extract_summary_and_breaking(
-                filtered, semver_diff
-            )
-            return format_container_markdown(
-                name=name,
-                local_val=local_val,
-                remote_val=remote_val,
-                semver_diff=semver_diff,
-                compose_file=compose_file,
-                releases_covered=covered,
-                summary_bullets=summary,
-                breaking_bullets=breaking,
-            )
-        except Exception as e:
-            return format_container_markdown(
-                name=name,
-                local_val=local_val,
-                remote_val=remote_val,
-                semver_diff=semver_diff,
-                compose_file=compose_file,
-                releases_covered=[
-                    {
-                        "tag": remote_val,
-                        "name": f"Release {remote_val}",
-                        "url": f"https://github.com/{gh_repo}/releases",
-                        "has_breaking": semver_diff == "major",
-                    }
-                ],
-                summary_bullets=[],
-                breaking_bullets=[],
-                note=f"Notice: Could not fetch changelog details from {gh_repo}: {e}",
-            )
-
-    # Fallback if no repo was resolved
-    return format_container_markdown(
-        name=name,
-        local_val=local_val,
-        remote_val=remote_val,
-        semver_diff=semver_diff,
-        compose_file=compose_file,
-        releases_covered=[],
-        summary_bullets=[],
-        breaking_bullets=[],
-        note="Upstream release notes URL could not be resolved automatically.",
-    )
-
-
 def main():
+    parser = argparse.ArgumentParser(description="Check WUD for container updates")
+    parser.add_argument(
+        "--json",
+        "--raw",
+        action="store_true",
+        dest="json_mode",
+        help="Output structured JSON array containing raw changelogs",
+    )
+    args = parser.parse_args()
+
     try:
         wud_token = get_wud_token()
         wud_headers = {"User-Agent": "homelab-check-updates/1.0"}
@@ -661,15 +574,19 @@ def main():
     updates = [c for c in raw_containers if c.get("updateAvailable") is True]
 
     if not updates:
-        print("No updates available.")
+        if args.json_mode:
+            print("[]")
+        else:
+            print("No updates available.")
         sys.exit(0)
 
-    sections = []
-    for c in updates:
-        md = process_container(c)
-        sections.append(md)
+    containers_data = [collect_container_data(c) for c in updates]
 
-    print("\n---\n\n".join(sections))
+    if args.json_mode:
+        print(json.dumps(containers_data, indent=2))
+    else:
+        sections = [format_container_markdown(d) for d in containers_data]
+        print("\n---\n\n".join(sections))
 
 
 if __name__ == "__main__":
