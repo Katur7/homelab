@@ -44,8 +44,12 @@ access_control:
       resources:
         - '^/\.well-known/.*'
         - '^/api/.*'
+        - '^/oauth/.*'
+        - '^/auth/.*'
+        - '^/v1/.*'
         - '^/ws.*'
         - '^/pair.*'
+        - '^/health$'
       policy: bypass
 
     # Secured sites
