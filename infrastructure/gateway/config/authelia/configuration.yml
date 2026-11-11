@@ -39,6 +39,15 @@ access_control:
     - domain: ord-dagsins.pippinn.me
       policy: bypass
     
+    # T3 Code mobile app, WebSocket & discovery traffic (authenticated by T3 pairing token + LAN allowlist)
+    - domain: 't3.internal.pippinn.me'
+      resources:
+        - '^/\.well-known/.*'
+        - '^/api/.*'
+        - '^/ws.*'
+        - '^/pair.*'
+      policy: bypass
+
     # Secured sites
     - domain: 't3.internal.pippinn.me'
       policy: two_factor
